@@ -6,7 +6,7 @@
         "orientation": "portrait",
         "icon": "./assets/images/icon.png",
         "scheme": "photos",
-        "userInterfaceStyle": "automatic",
+        "userInterfaceStyle": "dark",
         "backgroundColor": "#000000",
         "ios": {
             "supportsTablet": true
@@ -33,10 +33,28 @@
                         "backgroundColor": "#000000"
                     }
                 }
-            ]
+            ],
+            [
+                "expo-media-library",
+                {
+                    "photosPermission": "Photos needs access to your library to display your photos and albums.",
+                    "savePhotosPermission": "Photos needs access to save changes to your library.",
+                    "isAccessMediaLocationEnabled": true,
+                    "granularPermissions": ["photo"]
+                }
+            ],
+            [
+                "expo-location",
+                {
+                    "locationWhenInUsePermission": "Photos uses location services to show the name of the place where a photo was taken."
+                }
+            ],
+            "expo-image",
+            "expo-sqlite"
         ],
         "experiments": {
-            "reactCompiler": true
+            "reactCompiler": true,
+            "tsconfigPaths": true
         }
     }
 }

@@ -3,7 +3,8 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 export type RootStackParamList = {
     Home: undefined;
-    Details: undefined;
+    Album: { albumId: string; title: string };
+    Viewer: { albumId?: string; index: number };
 };
 
 declare global {
