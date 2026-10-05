@@ -4,17 +4,19 @@ import { useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AlbumGrid } from "@/components/AlbumGrid";
-import { PhotoGrid } from "@/components/PhotoGrid";
+import { AlbumsOverview } from "@/components/AlbumsOverview";
+import { MediaGrid } from "@/components/MediaGrid";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
+import { useCollections, useMediaList } from "@/hooks/use-media-items";
 import { useMediaLibrary } from "@/hooks/use-media-library";
-import { useAlbums, usePhotoIds } from "@/hooks/use-photos";
+import type { MediaSource } from "@/lib/database";
 import { cn } from "@/lib/utils";
 
 type Tab = "photos" | "albums";
 
+const ALL_ITEMS: MediaSource = { kind: "all" };
 const HEADER_HEIGHT = 52;
 const TAB_BAR_HEIGHT = 56;
 
@@ -22,8 +24,8 @@ export function HomeScreen() {
     const navigation = useNavigation();
     const insets = useSafeAreaInsets();
     const { isGranted, syncStatus, requestPermission } = useMediaLibrary();
-    const { ids, isLoaded } = usePhotoIds();
-    const albums = useAlbums();
+    const { entries, isLoaded } = useMediaList(ALL_ITEMS);
+    const overview = useCollections();
     const [tab, setTab] = useState<Tab>("photos");
 
     if (isGranted === undefined) {
@@ -38,8 +40,8 @@ export function HomeScreen() {
                     Access your photos
                 </Text>
                 <Text className="text-center text-sm text-neutral-400">
-                    Allow access to your photo library to browse your photos and
-                    albums.
+                    Allow access to your library to browse your photos, videos
+                    and albums.
                 </Text>
                 <Button className="mt-2" onPress={requestPermission}>
                     <Text>Allow access</Text>
@@ -55,36 +57,39 @@ export function HomeScreen() {
     return (
         <View className="flex-1 bg-black">
             <View className={cn("flex-1", tab !== "photos" && "hidden")}>
-                <PhotoGrid
-                    ids={ids}
+                <MediaGrid
+                    entries={entries}
                     topInset={topInset}
                     bottomInset={bottomInset}
-                    onPressPhoto={(index) =>
-                        navigation.navigate("Viewer", { index })
+                    onPressItem={(index) =>
+                        navigation.navigate("Viewer", {
+                            source: ALL_ITEMS,
+                            index,
+                        })
                     }
                     empty={
                         isLoaded && !isIndexing ? (
-                            <EmptyState message="No photos yet" />
+                            <View className="items-center pt-32">
+                                <Text className="text-sm text-neutral-500">
+                                    No photos yet
+                                </Text>
+                            </View>
                         ) : undefined
                     }
                 />
             </View>
 
             <View className={cn("flex-1", tab !== "albums" && "hidden")}>
-                <AlbumGrid
-                    albums={albums ?? []}
+                <AlbumsOverview
+                    collections={overview?.collections ?? []}
+                    albums={overview?.albums ?? []}
                     topInset={topInset + 8}
                     bottomInset={bottomInset}
-                    onPressAlbum={(album) =>
+                    onPressCollection={(collection) =>
                         navigation.navigate("Album", {
-                            albumId: album.id,
-                            title: album.title,
+                            source: collection.source,
+                            title: collection.title,
                         })
-                    }
-                    empty={
-                        albums && !isIndexing ? (
-                            <EmptyState message="No albums yet" />
-                        ) : undefined
                     }
                 />
             </View>
@@ -103,11 +108,6 @@ export function HomeScreen() {
                             {isIndexing ? "Indexing" : "Updating"}
                         </Text>
                     </View>
-                )}
-                {syncStatus === "idle" && tab === "photos" && isLoaded && (
-                    <Text className="text-xs text-neutral-400">
-                        {ids.length.toLocaleString()} photos
-                    </Text>
                 )}
             </View>
 
@@ -152,13 +152,5 @@ function TabButton({ label, icon, isActive, onPress }: TabButtonProps) {
                 {label}
             </Text>
         </Pressable>
-    );
-}
-
-function EmptyState({ message }: { message: string }) {
-    return (
-        <View className="items-center pt-32">
-            <Text className="text-sm text-neutral-500">{message}</Text>
-        </View>
     );
 }

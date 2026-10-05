@@ -1,6 +1,7 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { ChevronLeft, Info, MapPin } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, useWindowDimensions, View } from "react-native";
@@ -8,46 +9,41 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
-import { usePhotoDetails, usePhotoIds } from "@/hooks/use-photos";
-import type { Photo } from "@/lib/database";
+import { useMediaDetails, useMediaList } from "@/hooks/use-media-items";
+import type { MediaItem } from "@/lib/database";
+import { formatDuration, formatFullDate, formatTime } from "@/lib/format";
 import type { Place } from "@/lib/location";
 import type { RootStackParamList } from "@/navigation";
-
-const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "long" });
-const timeFormatter = new Intl.DateTimeFormat(undefined, {
-    timeStyle: "short",
-});
-const fullDateFormatter = new Intl.DateTimeFormat(undefined, {
-    dateStyle: "full",
-    timeStyle: "short",
-});
 
 export function ViewerScreen({
     navigation,
     route,
 }: NativeStackScreenProps<RootStackParamList, "Viewer">) {
-    const { albumId, index: initialIndex } = route.params;
+    const { source, index: initialIndex } = route.params;
     const insets = useSafeAreaInsets();
     const { width, height } = useWindowDimensions();
-    const { ids } = usePhotoIds(albumId);
+    const { entries } = useMediaList(source);
     const [currentIndex, setCurrentIndex] = useState(initialIndex);
     const [isChromeVisible, setIsChromeVisible] = useState(true);
     const [isInfoVisible, setIsInfoVisible] = useState(false);
 
-    const currentId = ids[Math.min(currentIndex, ids.length - 1)];
-    const { photo, place } = usePhotoDetails(currentId);
-    const takenAt = photo?.creationTime ?? photo?.modificationTime ?? null;
+    const currentEntry = entries[Math.min(currentIndex, entries.length - 1)];
+    const { item, place } = useMediaDetails(currentEntry?.id);
+    const takenAt = item?.creationTime ?? item?.modificationTime ?? null;
 
     return (
         <View className="flex-1 bg-black">
-            {ids.length > 0 && (
+            {entries.length > 0 && (
                 <FlashList
-                    data={ids}
+                    data={entries}
                     horizontal
                     pagingEnabled
                     showsHorizontalScrollIndicator={false}
-                    initialScrollIndex={Math.min(initialIndex, ids.length - 1)}
-                    keyExtractor={(id) => id}
+                    initialScrollIndex={Math.min(
+                        initialIndex,
+                        entries.length - 1,
+                    )}
+                    keyExtractor={(entry) => entry.id}
                     onMomentumScrollEnd={(event) =>
                         setCurrentIndex(
                             Math.round(
@@ -55,20 +51,29 @@ export function ViewerScreen({
                             ),
                         )
                     }
-                    renderItem={({ item }) => (
+                    renderItem={({ item: entry, index }) => (
                         <Pressable
                             onPress={() =>
                                 setIsChromeVisible((isVisible) => !isVisible)
                             }
                             style={{ width, height }}
                         >
-                            <Image
-                                source={{ uri: item }}
-                                recyclingKey={item}
-                                contentFit="contain"
-                                cachePolicy="memory"
-                                style={{ width, height }}
-                            />
+                            {entry.duration !== null &&
+                            index === currentIndex ? (
+                                <VideoPlayback
+                                    uri={entry.id}
+                                    width={width}
+                                    height={height}
+                                />
+                            ) : (
+                                <Image
+                                    source={{ uri: entry.id }}
+                                    recyclingKey={entry.id}
+                                    contentFit="contain"
+                                    cachePolicy="memory"
+                                    style={{ width, height }}
+                                />
+                            )}
                         </Pressable>
                     )}
                 />
@@ -90,24 +95,36 @@ export function ViewerScreen({
                             className="text-white"
                         />
                     </Pressable>
+
                     <View className="flex-1 items-center">
-                        <Text
-                            numberOfLines={1}
-                            className="text-sm font-semibold text-white"
-                        >
-                            {place?.name ??
-                                (takenAt !== null
-                                    ? dateFormatter.format(takenAt)
-                                    : "")}
-                        </Text>
                         {takenAt !== null && (
-                            <Text className="text-xs text-neutral-300">
-                                {place?.name
-                                    ? `${dateFormatter.format(takenAt)}, ${timeFormatter.format(takenAt)}`
-                                    : timeFormatter.format(takenAt)}
-                            </Text>
+                            <>
+                                <Text
+                                    numberOfLines={1}
+                                    className="text-base font-semibold text-white"
+                                >
+                                    {formatFullDate(takenAt)}
+                                </Text>
+                                <View className="flex-row items-center gap-2">
+                                    <Text className="text-xs text-neutral-300">
+                                        {formatTime(takenAt)}
+                                    </Text>
+                                    {place?.locality && (
+                                        <>
+                                            <View className="h-3 w-px bg-neutral-500" />
+                                            <Text
+                                                numberOfLines={1}
+                                                className="shrink text-xs text-neutral-300"
+                                            >
+                                                {place.locality}
+                                            </Text>
+                                        </>
+                                    )}
+                                </View>
+                            </>
                         )}
                     </View>
+
                     <Pressable
                         onPress={() =>
                             setIsInfoVisible((isVisible) => !isVisible)
@@ -126,9 +143,9 @@ export function ViewerScreen({
                 </View>
             )}
 
-            {isChromeVisible && isInfoVisible && photo && (
-                <PhotoInformation
-                    photo={photo}
+            {isChromeVisible && isInfoVisible && item && (
+                <MediaInformation
+                    item={item}
                     place={place}
                     bottomInset={insets.bottom}
                 />
@@ -137,18 +154,35 @@ export function ViewerScreen({
     );
 }
 
-type PhotoInformationProps = {
-    photo: Photo;
+type VideoPlaybackProps = {
+    uri: string;
+    width: number;
+    height: number;
+};
+
+function VideoPlayback({ uri, width, height }: VideoPlaybackProps) {
+    const player = useVideoPlayer(uri, (videoPlayer) => {
+        videoPlayer.play();
+    });
+
+    return (
+        <VideoView
+            player={player}
+            nativeControls
+            contentFit="contain"
+            style={{ width, height }}
+        />
+    );
+}
+
+type MediaInformationProps = {
+    item: MediaItem;
     place: Place | undefined;
     bottomInset: number;
 };
 
-function PhotoInformation({
-    photo,
-    place,
-    bottomInset,
-}: PhotoInformationProps) {
-    const takenAt = photo.creationTime ?? photo.modificationTime;
+function MediaInformation({ item, place, bottomInset }: MediaInformationProps) {
+    const takenAt = item.creationTime ?? item.modificationTime;
 
     return (
         <View
@@ -157,7 +191,7 @@ function PhotoInformation({
         >
             {takenAt !== null && (
                 <Text className="text-base font-semibold text-white">
-                    {fullDateFormatter.format(takenAt)}
+                    {formatFullDate(takenAt)}, {formatTime(takenAt)}
                 </Text>
             )}
 
@@ -169,7 +203,7 @@ function PhotoInformation({
                 />
                 <View className="flex-1 gap-0.5">
                     <Text className="text-sm text-white">
-                        {formatPlace(place)}
+                        {describePlace(place)}
                     </Text>
                     {place?.coordinate && (
                         <Text className="text-xs text-neutral-400">
@@ -181,31 +215,47 @@ function PhotoInformation({
             </View>
 
             <View className="gap-0.5">
-                {photo.filename && (
+                {item.filename && (
                     <Text numberOfLines={1} className="text-sm text-white">
-                        {photo.filename}
+                        {item.filename}
                     </Text>
                 )}
-                {photo.width !== null && photo.height !== null && (
-                    <Text className="text-xs text-neutral-400">
-                        {photo.width} × {photo.height} ·{" "}
-                        {((photo.width * photo.height) / 1_000_000).toFixed(1)}{" "}
-                        MP
-                    </Text>
-                )}
+                <Text className="text-xs text-neutral-400">
+                    {describeDimensions(item)}
+                </Text>
             </View>
         </View>
     );
 }
 
-function formatPlace(place: Place | undefined): string {
+function describePlace(place: Place | undefined): string {
     if (place === undefined) {
         return "Locating…";
     }
 
-    if (place.name) {
-        return place.name;
+    if (place.address) {
+        return place.address;
     }
 
     return place.coordinate ? "Unknown place" : "No location";
+}
+
+function describeDimensions(item: MediaItem): string {
+    const parts: string[] = [];
+
+    if (item.width !== null && item.height !== null) {
+        parts.push(`${item.width} × ${item.height}`);
+
+        if (item.mediaType === "photo") {
+            const megapixels = (item.width * item.height) / 1_000_000;
+
+            parts.push(`${megapixels.toFixed(1)} MP`);
+        }
+    }
+
+    if (item.duration !== null) {
+        parts.push(formatDuration(item.duration));
+    }
+
+    return parts.join(" · ");
 }

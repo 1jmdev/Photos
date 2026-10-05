@@ -1,17 +1,17 @@
 import {
     AssetField,
     type AssetMetadata,
-    Album as MediaAlbum,
+    Album as DeviceAlbumHandle,
+    MediaType as DeviceMediaType,
     type MediaLibraryAssetsChangeEvent,
-    MediaType,
     Query,
 } from "expo-media-library";
 import { Platform } from "react-native";
 
 import {
     type IndexUpdate,
-    type Photo,
-    readIndexedPhotoIds,
+    type MediaItem,
+    readIndexedIds,
     readModificationCursor,
     writeIndexUpdate,
 } from "@/lib/database";
@@ -19,7 +19,7 @@ import {
 export type SyncStatus = "idle" | "indexing" | "updating";
 
 export type SyncState = {
-    /** Incremented every time the indexed photos or albums change. */
+    /** Incremented every time the indexed items or albums change. */
     revision: number;
     status: SyncStatus;
 };
@@ -31,10 +31,16 @@ type PendingChange =
 type DeviceAlbum = {
     id: string;
     title: string;
-    handle: MediaAlbum;
+    handle: DeviceAlbumHandle;
 };
 
-/** Newest photos indexed first on a fresh install so the grid appears at once. */
+type DeviceQueryOptions = {
+    album?: DeviceAlbumHandle;
+    modifiedSince?: number;
+    limit?: number;
+};
+
+/** Newest items indexed first on a fresh install so the grid appears at once. */
 const FIRST_PAGE_SIZE = 400;
 
 let syncState: SyncState = { revision: 0, status: "idle" };
@@ -79,7 +85,7 @@ export function syncOnResume(): void {
 }
 
 /**
- * Applies a change event from the operating system. Only the affected photos
+ * Applies a change event from the operating system. Only the affected items
  * are written; the full library is read only when the system requires it.
  */
 export function syncMediaLibraryChange(
@@ -150,23 +156,23 @@ async function runFullSync(): Promise<void> {
 
     if (isFirstIndex) {
         await writeIndexUpdate({
-            upsertedPhotos: await queryPhotos({ limit: FIRST_PAGE_SIZE }),
-            removedPhotoIds: [],
+            upsertedItems: await queryDeviceItems({ limit: FIRST_PAGE_SIZE }),
+            removedIds: [],
             albums: [],
-            albumPhotoIds: new Map(),
+            albumItemIds: new Map(),
             isComplete: false,
         });
         publishChange();
     }
 
-    const photos = await queryPhotos();
+    const items = await queryDeviceItems();
     const albums = await readDeviceAlbums();
 
     await writeIndexUpdate({
-        upsertedPhotos: photos,
-        removedPhotoIds: [],
+        upsertedItems: items,
+        removedIds: [],
         albums,
-        albumPhotoIds: await queryAlbumPhotoIds(albums),
+        albumItemIds: await queryAlbumItemIds(albums),
         isComplete: true,
     });
     publishChange();
@@ -185,29 +191,29 @@ async function runIncrementalSync(
 
     setSyncState({ ...syncState, status: "updating" });
 
-    const indexedIds = await readIndexedPhotoIds();
-    const changedPhotos = await queryPhotos({ modifiedSince: cursor });
-    const changedIds = new Set(changedPhotos.map((photo) => photo.id));
-    const hasNewPhotos = changedPhotos.some(
-        (photo) => !indexedIds.has(photo.id),
-    );
-    let removedPhotoIds = removedIds.filter((id) => indexedIds.has(id));
+    const indexedIds = await readIndexedIds();
+    const changedItems = await queryDeviceItems({ modifiedSince: cursor });
+    const changedIds = new Set(changedItems.map((item) => item.id));
+    const hasNewItems = changedItems.some((item) => !indexedIds.has(item.id));
+    let confirmedRemovedIds = removedIds.filter((id) => indexedIds.has(id));
 
-    if (Platform.OS === "android" && !hasNewPhotos) {
+    if (Platform.OS === "android" && !hasNewItems) {
         // Android reports that the library changed but not how. When no new
-        // photo was found the change was a deletion, so the identifiers are
-        // compared against the media store to find the removed photos.
-        const deviceIds = await queryPhotoIds();
+        // item was found the change was a deletion, so the identifiers are
+        // compared against the media store to find the removed items.
+        const deviceIds = (await queryDeviceItems()).map((item) => item.id);
         const deviceIdSet = new Set(deviceIds);
 
         if (deviceIds.some((id) => !indexedIds.has(id))) {
-            // A photo with an older modification time was added, for example
+            // An item with an older modification time was added, for example
             // by restoring a backup. It cannot be found incrementally.
             await runFullSync();
             return;
         }
 
-        removedPhotoIds = [...indexedIds].filter((id) => !deviceIdSet.has(id));
+        confirmedRemovedIds = [...indexedIds].filter(
+            (id) => !deviceIdSet.has(id),
+        );
     }
 
     if (insertedIds.some((id) => !indexedIds.has(id) && !changedIds.has(id))) {
@@ -215,21 +221,21 @@ async function runIncrementalSync(
         return;
     }
 
-    const hasModifiedPhotos = changedPhotos.some(
-        (photo) =>
-            photo.modificationTime !== null && photo.modificationTime > cursor,
+    const hasModifiedItems = changedItems.some(
+        (item) =>
+            item.modificationTime !== null && item.modificationTime > cursor,
     );
 
-    if (!hasNewPhotos && !hasModifiedPhotos && removedPhotoIds.length === 0) {
+    if (!hasNewItems && !hasModifiedItems && confirmedRemovedIds.length === 0) {
         return;
     }
 
     const albums = await readDeviceAlbums();
     const update: IndexUpdate = {
-        upsertedPhotos: changedPhotos,
-        removedPhotoIds,
+        upsertedItems: changedItems,
+        removedIds: confirmedRemovedIds,
         albums,
-        albumPhotoIds: await queryAlbumPhotoIds(albums, cursor),
+        albumItemIds: await queryAlbumItemIds(albums, cursor),
         isComplete: false,
     };
 
@@ -238,18 +244,17 @@ async function runIncrementalSync(
 }
 
 /**
- * Reads image metadata straight from the system media store without
- * resolving file paths or decoding images.
+ * Reads photo and video metadata straight from the system media store without
+ * resolving file paths or decoding files.
  */
-async function queryPhotos(
-    options: {
-        album?: MediaAlbum;
-        modifiedSince?: number;
-        limit?: number;
-    } = {},
-): Promise<Photo[]> {
+async function queryDeviceItems(
+    options: DeviceQueryOptions = {},
+): Promise<MediaItem[]> {
     let query = new Query()
-        .eq(AssetField.MEDIA_TYPE, MediaType.IMAGE)
+        .within(AssetField.MEDIA_TYPE, [
+            DeviceMediaType.IMAGE,
+            DeviceMediaType.VIDEO,
+        ])
         .orderBy({ key: AssetField.CREATION_TIME, ascending: false });
 
     if (options.album) {
@@ -266,15 +271,7 @@ async function queryPhotos(
 
     const metadata = await query.exeForMetadata();
 
-    return metadata.map(toPhoto);
-}
-
-async function queryPhotoIds(
-    options: { album?: MediaAlbum; modifiedSince?: number } = {},
-): Promise<string[]> {
-    const photos = await queryPhotos(options);
-
-    return photos.map((photo) => photo.id);
+    return metadata.map(toMediaItem);
 }
 
 /**
@@ -282,7 +279,7 @@ async function queryPhotoIds(
  * media folders, such as Camera, Screenshots or Download.
  */
 async function readDeviceAlbums(): Promise<DeviceAlbum[]> {
-    const albums = await MediaAlbum.getAll();
+    const albums = await DeviceAlbumHandle.getAll();
 
     return Promise.all(
         albums.map(async (album) => ({
@@ -293,29 +290,35 @@ async function readDeviceAlbums(): Promise<DeviceAlbum[]> {
     );
 }
 
-async function queryAlbumPhotoIds(
+async function queryAlbumItemIds(
     albums: DeviceAlbum[],
     modifiedSince?: number,
 ): Promise<Map<string, string[]>> {
     const entries = await Promise.all(
-        albums.map(
-            async (album) =>
-                [
-                    album.id,
-                    await queryPhotoIds({ album: album.handle, modifiedSince }),
-                ] as const,
-        ),
+        albums.map(async (album) => {
+            const items = await queryDeviceItems({
+                album: album.handle,
+                modifiedSince,
+            });
+
+            return [album.id, items.map((item) => item.id)] as const;
+        }),
     );
 
     return new Map(entries);
 }
 
-function toPhoto(metadata: AssetMetadata): Photo {
+function toMediaItem(metadata: AssetMetadata): MediaItem {
+    const isVideo = metadata.mediaType === DeviceMediaType.VIDEO;
+
     return {
         id: metadata.id,
+        mediaType: isVideo ? "video" : "photo",
         filename: metadata.filename,
         width: metadata.width,
         height: metadata.height,
+        duration: isVideo ? metadata.duration : null,
+        isFavorite: metadata.isFavorite,
         creationTime: metadata.creationTime,
         modificationTime: metadata.modificationTime,
     };

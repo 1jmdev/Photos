@@ -3,10 +3,10 @@ import { ChevronLeft } from "lucide-react-native";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { PhotoGrid } from "@/components/PhotoGrid";
+import { MediaGrid } from "@/components/MediaGrid";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
-import { usePhotoIds } from "@/hooks/use-photos";
+import { useMediaList } from "@/hooks/use-media-items";
 import type { RootStackParamList } from "@/navigation";
 
 const HEADER_HEIGHT = 52;
@@ -15,19 +15,19 @@ export function AlbumScreen({
     navigation,
     route,
 }: NativeStackScreenProps<RootStackParamList, "Album">) {
-    const { albumId, title } = route.params;
+    const { source, title } = route.params;
     const insets = useSafeAreaInsets();
-    const { ids, isLoaded } = usePhotoIds(albumId);
+    const { entries } = useMediaList(source);
     const topInset = insets.top + HEADER_HEIGHT;
 
     return (
         <View className="flex-1 bg-black">
-            <PhotoGrid
-                ids={ids}
+            <MediaGrid
+                entries={entries}
                 topInset={topInset}
                 bottomInset={insets.bottom}
-                onPressPhoto={(index) =>
-                    navigation.navigate("Viewer", { albumId, index })
+                onPressItem={(index) =>
+                    navigation.navigate("Viewer", { source, index })
                 }
             />
 
@@ -42,19 +42,12 @@ export function AlbumScreen({
                 >
                     <Icon as={ChevronLeft} size={26} className="text-white" />
                 </Pressable>
-                <View className="flex-1">
-                    <Text
-                        numberOfLines={1}
-                        className="text-lg font-semibold text-white"
-                    >
-                        {title}
-                    </Text>
-                    {isLoaded && (
-                        <Text className="text-xs text-neutral-400">
-                            {ids.length.toLocaleString()} photos
-                        </Text>
-                    )}
-                </View>
+                <Text
+                    numberOfLines={1}
+                    className="flex-1 text-lg font-semibold text-white"
+                >
+                    {title}
+                </Text>
             </View>
         </View>
     );

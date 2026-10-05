@@ -37,10 +37,10 @@
             [
                 "expo-media-library",
                 {
-                    "photosPermission": "Photos needs access to your library to display your photos and albums.",
+                    "photosPermission": "Photos needs access to your library to display your photos, videos and albums.",
                     "savePhotosPermission": "Photos needs access to save changes to your library.",
                     "isAccessMediaLocationEnabled": true,
-                    "granularPermissions": ["photo"]
+                    "granularPermissions": ["photo", "video"]
                 }
             ],
             [
@@ -50,7 +50,8 @@
                 }
             ],
             "expo-image",
-            "expo-sqlite"
+            "expo-sqlite",
+            "expo-video"
         ],
         "experiments": {
             "reactCompiler": true,

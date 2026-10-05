@@ -8,35 +8,41 @@ import { Asset } from "expo-media-library";
 
 import {
     type Coordinate,
-    readPhotoLocation,
+    type PlaceName,
+    readItemLocation,
     readPlaceName,
-    writePhotoLocation,
+    writeItemLocation,
     writePlaceName,
 } from "@/lib/database";
 
-export type Place = {
+export type Place = PlaceName & {
     coordinate: Coordinate | null;
-    name: string | null;
 };
 
-/** Three decimal places group coordinates within roughly one hundred metres. */
-const COORDINATE_PRECISION = 3;
+/** Four decimal places group coordinates within roughly ten metres. */
+const COORDINATE_PRECISION = 4;
+
+const UNKNOWN_PLACE: Place = {
+    coordinate: null,
+    locality: null,
+    address: null,
+};
 
 /**
- * Resolves where a photo was taken. The coordinate comes from the photo
+ * Resolves where an item was taken. The coordinate comes from the item
  * metadata and is turned into a place name by the platform geocoder. Both
  * results are cached, so every place is geocoded only once.
  */
-export async function resolvePlace(photoId: string): Promise<Place> {
-    let coordinate = await readPhotoLocation(photoId);
+export async function resolvePlace(itemId: string): Promise<Place> {
+    let coordinate = await readItemLocation(itemId);
 
     if (coordinate === undefined) {
-        coordinate = await readPhotoCoordinate(photoId);
-        await writePhotoLocation(photoId, coordinate);
+        coordinate = await readItemCoordinate(itemId);
+        await writeItemLocation(itemId, coordinate);
     }
 
     if (!coordinate) {
-        return { coordinate: null, name: null };
+        return UNKNOWN_PLACE;
     }
 
     const coordinateKey = [
@@ -46,28 +52,29 @@ export async function resolvePlace(photoId: string): Promise<Place> {
     const cachedName = await readPlaceName(coordinateKey);
 
     if (cachedName) {
-        return { coordinate, name: cachedName };
+        return { coordinate, ...cachedName };
     }
 
     if (!(await hasLocationPermission())) {
-        return { coordinate, name: null };
+        return { coordinate, locality: null, address: null };
     }
 
     const addresses = await reverseGeocodeAsync(coordinate).catch(() => []);
-    const name = addresses.length > 0 ? formatAddress(addresses[0]) : null;
 
-    if (name) {
-        await writePlaceName(coordinateKey, name);
+    if (addresses.length === 0) {
+        return { coordinate, locality: null, address: null };
     }
 
-    return { coordinate, name };
+    const placeName = formatPlaceName(addresses[0]);
+
+    await writePlaceName(coordinateKey, placeName);
+
+    return { coordinate, ...placeName };
 }
 
-async function readPhotoCoordinate(
-    photoId: string,
-): Promise<Coordinate | null> {
+async function readItemCoordinate(itemId: string): Promise<Coordinate | null> {
     try {
-        const location = await new Asset(photoId).getLocation();
+        const location = await new Asset(itemId).getLocation();
 
         if (
             !location ||
@@ -94,15 +101,26 @@ async function hasLocationPermission(): Promise<boolean> {
     return request.granted;
 }
 
-function formatAddress(address: LocationGeocodedAddress): string | null {
-    const locality = address.city ?? address.subregion ?? address.region;
-    const parts: string[] = [];
+/**
+ * Produces "Nehvizdy, Czechia" as the locality and
+ * "Vinohradská 325, 250 81 Nehvizdy, Czechia" as the address.
+ */
+function formatPlaceName(address: LocationGeocodedAddress): PlaceName {
+    const city = address.city ?? address.subregion ?? address.region;
+    const street = joinParts([address.street, address.streetNumber], " ");
+    const cityWithPostalCode = joinParts([address.postalCode, city], " ");
 
-    for (const part of [address.district, locality, address.country]) {
-        if (part && !parts.includes(part)) {
-            parts.push(part);
-        }
-    }
+    return {
+        locality: joinParts([city, address.country], ", "),
+        address: joinParts([street, cityWithPostalCode, address.country], ", "),
+    };
+}
 
-    return parts.length > 0 ? parts.join(", ") : null;
+function joinParts(
+    parts: (string | null | undefined)[],
+    separator: string,
+): string | null {
+    const presentParts = parts.filter((part): part is string => Boolean(part));
+
+    return presentParts.length > 0 ? presentParts.join(separator) : null;
 }

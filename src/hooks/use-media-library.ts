@@ -25,7 +25,7 @@ export type MediaLibraryState = {
  */
 export function useMediaLibrary(): MediaLibraryState {
     const [permission, askForPermission] = usePermissions({
-        granularPermissions: ["photo"],
+        granularPermissions: ["photo", "video"],
     });
     const { status } = useSyncExternalStore(subscribeToSync, getSyncState);
     const isGranted = permission?.granted;

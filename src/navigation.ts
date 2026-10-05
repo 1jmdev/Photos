@@ -1,10 +1,12 @@
 import { DarkTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
+import type { MediaSource } from "@/lib/database";
+
 export type RootStackParamList = {
     Home: undefined;
-    Album: { albumId: string; title: string };
-    Viewer: { albumId?: string; index: number };
+    Album: { source: MediaSource; title: string };
+    Viewer: { source: MediaSource; index: number };
 };
 
 declare global {
