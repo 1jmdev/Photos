@@ -4,6 +4,7 @@ import { Image } from "expo-image";
 import { useState } from "react";
 import { Pressable, StatusBar, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { DismissibleViewer } from "@/components/DismissibleViewer";
 import { MediaInformation } from "@/components/MediaInformation";
 import { Navbar } from "@/components/Navbar";
 import { VideoPlayback } from "@/components/VideoPlayback";
@@ -27,7 +28,7 @@ export function ViewerScreen({
     const takenAt = item?.creationTime ?? item?.modificationTime ?? null;
 
     return (
-        <View className="flex-1 bg-black">
+        <DismissibleViewer onDismiss={() => navigation.goBack()}>
             <StatusBar hidden={!isChromeVisible} barStyle="light-content" />
             {entries.length > 0 && (
                 <FlashList
@@ -105,6 +106,6 @@ export function ViewerScreen({
                     bottomInset={insets.bottom}
                 />
             )}
-        </View>
+        </DismissibleViewer>
     );
 }

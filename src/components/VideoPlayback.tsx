@@ -107,6 +107,7 @@ export function VideoPlayback({
             <VideoView
                 player={player}
                 nativeControls={false}
+                surfaceType="textureView"
                 contentFit="contain"
                 style={{ width, height }}
             />

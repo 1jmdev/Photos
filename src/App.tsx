@@ -24,7 +24,13 @@ export default function App() {
                         <Stack.Screen
                             name="Viewer"
                             component={ViewerScreen}
-                            options={{ animation: "fade" }}
+                            options={{
+                                animation: "fade",
+                                presentation: "transparentModal",
+                                contentStyle: {
+                                    backgroundColor: "transparent",
+                                },
+                            }}
                         />
                     </Stack.Navigator>
                 </NavigationContainer>
