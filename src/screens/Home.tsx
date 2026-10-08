@@ -145,6 +145,9 @@ function TabButton({ label, icon, isActive, onPress }: TabButtonProps) {
     return (
         <Pressable
             onPress={onPress}
+            accessibilityRole="tab"
+            accessibilityLabel={label}
+            accessibilityState={{ selected: isActive }}
             className="flex-1 items-center justify-center gap-1"
         >
             <Icon as={icon} size={22} className={colorClassName} />

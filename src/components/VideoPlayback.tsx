@@ -12,7 +12,6 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, Pressable, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { formatDuration } from "@/lib/format";

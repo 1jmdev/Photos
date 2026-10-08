@@ -1,11 +1,11 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
-import { ChevronLeft, Info, MapPin } from "lucide-react-native";
+import { MapPin } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, StatusBar, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
+import { Navbar } from "@/components/Navbar";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { VideoPlayback } from "@/components/VideoPlayback";
@@ -93,70 +93,14 @@ export function ViewerScreen({
             )}
 
             {isChromeVisible && (
-                <View
-                    className="absolute inset-x-0 top-0 flex-row items-center gap-3 px-4 pb-4"
-                    style={{ paddingTop: insets.top + 8 }}
-                >
-                    <Pressable
-                        onPress={() => navigation.goBack()}
-                        accessibilityRole="button"
-                        accessibilityLabel="Back to library"
-                        className="h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-neutral-900/90 active:opacity-60"
-                    >
-                        <Icon
-                            as={ChevronLeft}
-                            size={26}
-                            className="text-white"
-                        />
-                    </Pressable>
-
-                    <View className="flex-1 items-center rounded-3xl bg-black/60 px-3 py-2">
-                        {takenAt !== null && (
-                            <>
-                                <Text
-                                    numberOfLines={1}
-                                    className="text-base font-semibold text-white"
-                                >
-                                    {formatFullDate(takenAt)}
-                                </Text>
-                                <View className="flex-row items-center gap-2">
-                                    <Text className="text-xs text-neutral-300">
-                                        {formatTime(takenAt)}
-                                    </Text>
-                                    {place?.locality && (
-                                        <>
-                                            <View className="h-3 w-px bg-neutral-500" />
-                                            <Text
-                                                numberOfLines={1}
-                                                className="shrink text-xs text-neutral-300"
-                                            >
-                                                {place.locality}
-                                            </Text>
-                                        </>
-                                    )}
-                                </View>
-                            </>
-                        )}
-                    </View>
-
-                    <Pressable
-                        onPress={() =>
-                            setIsInfoVisible((isVisible) => !isVisible)
-                        }
-                        accessibilityRole="button"
-                        accessibilityLabel="Media information"
-                        accessibilityState={{ selected: isInfoVisible }}
-                        className="h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-neutral-900/90 active:opacity-60"
-                    >
-                        <Icon
-                            as={Info}
-                            size={22}
-                            className={
-                                isInfoVisible ? "text-sky-400" : "text-white"
-                            }
-                        />
-                    </Pressable>
-                </View>
+                <Navbar
+                    takenAt={takenAt}
+                    isInfoVisible={isInfoVisible}
+                    onBack={() => navigation.goBack()}
+                    onToggleInfo={() =>
+                        setIsInfoVisible((isVisible) => !isVisible)
+                    }
+                />
             )}
 
             {isChromeVisible && isInfoVisible && item && (

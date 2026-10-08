@@ -37,8 +37,9 @@ export function AlbumScreen({
             >
                 <Pressable
                     onPress={() => navigation.goBack()}
-                    hitSlop={8}
-                    className="p-2 active:opacity-60"
+                    accessibilityRole="button"
+                    accessibilityLabel="Back to albums"
+                    className="h-11 w-11 items-center justify-center active:opacity-60"
                 >
                     <Icon as={ChevronLeft} size={26} className="text-white" />
                 </Pressable>
