@@ -4,19 +4,29 @@ import {
     reverseGeocodeAsync,
 } from "expo-location";
 import { Asset } from "expo-media-library";
+import { requireNativeModule } from "expo-modules-core";
+import { Platform } from "react-native";
 
 import {
     type Coordinate,
     type PlaceName,
     readItemLocation,
     readPlaceName,
-    writeItemLocation,
+    writeItemLocations,
     writePlaceName,
 } from "@/lib/database";
 
 export type Place = PlaceName & {
     coordinate: Coordinate | null;
 };
+
+/** Reads photo coordinates in bulk from file metadata on Android. */
+const MediaLocations =
+    Platform.OS === "android"
+        ? requireNativeModule<{
+              readLocations(ids: string[]): Promise<number[]>;
+          }>("MediaLocations")
+        : null;
 
 /** Four decimal places group coordinates within roughly ten metres. */
 const COORDINATE_PRECISION = 4;
@@ -37,7 +47,7 @@ export async function resolvePlace(itemId: string): Promise<Place> {
 
     if (coordinate === undefined) {
         coordinate = await readItemCoordinate(itemId);
-        await writeItemLocation(itemId, coordinate);
+        await writeItemLocations([{ id: itemId, coordinate }]);
     }
 
     if (!coordinate) {
@@ -71,7 +81,9 @@ export async function resolvePlace(itemId: string): Promise<Place> {
     return { coordinate, ...placeName };
 }
 
-async function readItemCoordinate(itemId: string): Promise<Coordinate | null> {
+export async function readItemCoordinate(
+    itemId: string,
+): Promise<Coordinate | null> {
     try {
         const location = await new Asset(itemId).getLocation();
 
@@ -86,6 +98,29 @@ async function readItemCoordinate(itemId: string): Promise<Coordinate | null> {
     } catch {
         return null;
     }
+}
+
+/**
+ * Reads the coordinates of many items at once. Android parses the metadata
+ * natively in parallel; other platforms read every item separately.
+ */
+export async function readItemCoordinates(
+    itemIds: string[],
+): Promise<(Coordinate | null)[]> {
+    if (!MediaLocations) {
+        return Promise.all(itemIds.map(readItemCoordinate));
+    }
+
+    const coordinates = await MediaLocations.readLocations(itemIds);
+
+    return itemIds.map((_, index) => {
+        const latitude = coordinates[index * 2];
+        const longitude = coordinates[index * 2 + 1];
+
+        return Number.isNaN(latitude) || (latitude === 0 && longitude === 0)
+            ? null
+            : { latitude, longitude };
+    });
 }
 
 function formatPlaceName(address: LocationGeocodedAddress): PlaceName {

@@ -81,13 +81,8 @@ const WRITE_BATCH_SIZE = 2000;
 const CAMERA_ALBUM_TITLE = "camera";
 const SCREENSHOTS_ALBUM_TITLE = "screenshots";
 
-/**
- * Schema migrations. The position in the array plus one is the schema version
- * stored in `PRAGMA user_version`. New migrations are appended, never edited.
- */
-const MIGRATIONS = [
-    `
-    CREATE TABLE media_items (
+const SCHEMA = `
+    CREATE TABLE IF NOT EXISTS media_items (
         id TEXT PRIMARY KEY NOT NULL,
         media_type TEXT NOT NULL,
         filename TEXT,
@@ -97,38 +92,39 @@ const MIGRATIONS = [
         is_favorite INTEGER NOT NULL DEFAULT 0,
         creation_time INTEGER,
         modification_time INTEGER,
-        sort_time INTEGER NOT NULL
+        sort_time INTEGER NOT NULL,
+        is_location_read INTEGER NOT NULL DEFAULT 0,
+        latitude REAL,
+        longitude REAL
     );
 
-    CREATE INDEX media_items_sort_index ON media_items (sort_time DESC, id DESC);
-    CREATE INDEX media_items_modification_index ON media_items (modification_time);
+    CREATE INDEX IF NOT EXISTS media_items_sort_index
+        ON media_items (sort_time DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS media_items_modification_index
+        ON media_items (modification_time);
+    CREATE INDEX IF NOT EXISTS media_items_location_index
+        ON media_items (is_location_read, sort_time DESC);
 
-    CREATE TABLE albums (
+    CREATE TABLE IF NOT EXISTS albums (
         id TEXT PRIMARY KEY NOT NULL,
         title TEXT NOT NULL
     );
 
-    CREATE TABLE album_items (
+    CREATE TABLE IF NOT EXISTS album_items (
         album_id TEXT NOT NULL,
         item_id TEXT NOT NULL,
         PRIMARY KEY (album_id, item_id)
     ) WITHOUT ROWID;
 
-    CREATE INDEX album_items_item_index ON album_items (item_id);
+    CREATE INDEX IF NOT EXISTS album_items_item_index
+        ON album_items (item_id);
 
-    CREATE TABLE item_locations (
-        item_id TEXT PRIMARY KEY NOT NULL,
-        latitude REAL,
-        longitude REAL
-    );
-
-    CREATE TABLE place_names (
+    CREATE TABLE IF NOT EXISTS place_names (
         coordinate_key TEXT PRIMARY KEY NOT NULL,
         locality TEXT,
         address TEXT
     );
-    `,
-];
+`;
 
 let databasePromise: Promise<SQLiteDatabase> | null = null;
 
@@ -144,20 +140,7 @@ async function openDatabase(): Promise<SQLiteDatabase> {
         "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;",
     );
 
-    const row = await database.getFirstAsync<{ user_version: number }>(
-        "PRAGMA user_version",
-    );
-
-    for (
-        let version = row?.user_version ?? 0;
-        version < MIGRATIONS.length;
-        version += 1
-    ) {
-        await database.withTransactionAsync(async () => {
-            await database.execAsync(MIGRATIONS[version]);
-            await database.execAsync(`PRAGMA user_version = ${version + 1}`);
-        });
-    }
+    await database.execAsync(SCHEMA);
 
     return database;
 }
@@ -414,10 +397,9 @@ export async function writeIndexUpdate(update: IndexUpdate): Promise<void> {
             );
         }
 
-        await database.execAsync(`
-            DELETE FROM album_items WHERE item_id NOT IN (SELECT id FROM media_items);
-            DELETE FROM item_locations WHERE item_id NOT IN (SELECT id FROM media_items);
-        `);
+        await database.runAsync(
+            "DELETE FROM album_items WHERE item_id NOT IN (SELECT id FROM media_items)",
+        );
     });
 }
 
@@ -523,7 +505,8 @@ export async function readItemLocation(
         latitude: number | null;
         longitude: number | null;
     }>(
-        "SELECT latitude, longitude FROM item_locations WHERE item_id = ?",
+        `SELECT latitude, longitude FROM media_items
+        WHERE id = ? AND is_location_read = 1`,
         itemId,
     );
 
@@ -538,21 +521,25 @@ export async function readItemLocation(
     return { latitude: row.latitude, longitude: row.longitude };
 }
 
-export async function writeItemLocation(
-    itemId: string,
-    coordinate: Coordinate | null,
+export async function writeItemLocations(
+    locations: { id: string; coordinate: Coordinate | null }[],
 ): Promise<void> {
     const database = await getDatabase();
 
     await database.runAsync(
-        `INSERT INTO item_locations (item_id, latitude, longitude)
-        VALUES (?, ?, ?)
-        ON CONFLICT (item_id) DO UPDATE SET
-            latitude = excluded.latitude,
-            longitude = excluded.longitude`,
-        itemId,
-        coordinate?.latitude ?? null,
-        coordinate?.longitude ?? null,
+        `UPDATE media_items SET
+            is_location_read = 1,
+            latitude = json_extract(location.value, '$[1]'),
+            longitude = json_extract(location.value, '$[2]')
+        FROM json_each(?) AS location
+        WHERE media_items.id = json_extract(location.value, '$[0]')`,
+        JSON.stringify(
+            locations.map(({ id, coordinate }) => [
+                id,
+                coordinate?.latitude ?? null,
+                coordinate?.longitude ?? null,
+            ]),
+        ),
     );
 }
 
@@ -583,4 +570,32 @@ export async function writePlaceName(
         placeName.locality,
         placeName.address,
     );
+}
+
+export type LocatedItem = Coordinate & {
+    id: string;
+};
+
+/** Reads every indexed item whose coordinate is known. */
+export async function readLocatedItems(): Promise<LocatedItem[]> {
+    const database = await getDatabase();
+
+    return database.getAllAsync<LocatedItem>(
+        `SELECT id, latitude, longitude FROM media_items
+        WHERE latitude IS NOT NULL AND longitude IS NOT NULL`,
+    );
+}
+
+/** Reads the newest items whose location has not been read yet. */
+export async function readUnlocatedIds(limit: number): Promise<string[]> {
+    const database = await getDatabase();
+    const rows = await database.getAllAsync<{ id: string }>(
+        `SELECT id FROM media_items
+        WHERE is_location_read = 0
+        ORDER BY sort_time DESC
+        LIMIT ?`,
+        limit,
+    );
+
+    return rows.map((row) => row.id);
 }

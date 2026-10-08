@@ -3,10 +3,12 @@ import { useEffect, useState } from "react";
 import {
     type Collection,
     getSourceKey,
+    type LocatedItem,
     type MediaItem,
     type MediaListEntry,
     type MediaSource,
     readCollections,
+    readLocatedItems,
     readMediaItem,
     readMediaList,
 } from "@/lib/database";
@@ -160,4 +162,32 @@ export function useMediaDetails(itemId: string | undefined): MediaDetails {
     }
 
     return { item: details.item, place: details.place };
+}
+
+/** Returns every item with a known coordinate. */
+export function useLocatedItems(): LocatedItem[] {
+    const revision = useMediaSync((state) => state.revision);
+    const locationRevision = useMediaSync((state) => state.locationRevision);
+    const [items, setItems] = useState<LocatedItem[]>([]);
+
+    // biome-ignore lint/correctness/useExhaustiveDependencies: locations are reloaded whenever the index or its locations change.
+    useEffect(() => {
+        let isActive = true;
+
+        readLocatedItems()
+            .then((nextItems) => {
+                if (isActive) {
+                    setItems(nextItems);
+                }
+            })
+            .catch((error: unknown) => {
+                console.warn("Reading item locations failed", error);
+            });
+
+        return () => {
+            isActive = false;
+        };
+    }, [revision, locationRevision]);
+
+    return items;
 }

@@ -15,6 +15,7 @@
         "check": "biome check ."
     },
     "dependencies": {
+        "@maplibre/maplibre-react-native": "^11.5.0",
         "@react-navigation/native": "^7.5.0",
         "@react-navigation/native-stack": "^7.20.0",
         "@rn-primitives/accordion": "^1.5.2",
@@ -42,6 +43,7 @@
         "@rn-primitives/toggle-group": "^1.5.2",
         "@rn-primitives/tooltip": "^1.5.2",
         "@shopify/flash-list": "2.0.2",
+        "@types/geojson": "^7946.0.16",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "expo": "~57.0.26",

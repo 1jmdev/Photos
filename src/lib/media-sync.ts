@@ -14,14 +14,19 @@ import {
     type MediaItem,
     readIndexedIds,
     readModificationCursor,
+    readUnlocatedIds,
     writeIndexUpdate,
+    writeItemLocations,
 } from "@/lib/database";
+import { readItemCoordinates } from "@/lib/location";
 
 export type SyncStatus = "idle" | "indexing" | "updating";
 
 export type SyncState = {
     /** Incremented every time the indexed items or albums change. */
     revision: number;
+    /** Incremented every time item locations are read. */
+    locationRevision: number;
     status: SyncStatus;
 };
 
@@ -43,14 +48,18 @@ type DeviceQueryOptions = {
 
 /** Newest items indexed first on a fresh install so the grid appears at once. */
 const FIRST_PAGE_SIZE = 400;
+/** Number of item locations read from the media library at once. */
+const LOCATION_BATCH_SIZE = 5000;
 
 export const useMediaSync = create<SyncState>(() => ({
     revision: 0,
+    locationRevision: 0,
     status: "idle",
 }));
 
 let pendingChange: PendingChange | null = null;
 let isSyncRunning = false;
+let isLocationIndexRunning = false;
 
 /**
  * Brings the index up to date after the application starts. iOS keeps no
@@ -135,6 +144,43 @@ async function runPendingSyncs(): Promise<void> {
 
     useMediaSync.setState({ status: "idle" });
     isSyncRunning = false;
+    void indexLocations();
+}
+
+/**
+ * Reads the coordinates of items indexed without one, newest first, and
+ * publishes every batch so the map fills in while the scan runs.
+ */
+async function indexLocations(): Promise<void> {
+    if (isLocationIndexRunning) {
+        return;
+    }
+
+    isLocationIndexRunning = true;
+
+    try {
+        for (
+            let ids = await readUnlocatedIds(LOCATION_BATCH_SIZE);
+            ids.length > 0;
+            ids = await readUnlocatedIds(LOCATION_BATCH_SIZE)
+        ) {
+            const coordinates = await readItemCoordinates(ids);
+
+            await writeItemLocations(
+                ids.map((id, index) => ({
+                    id,
+                    coordinate: coordinates[index],
+                })),
+            );
+            useMediaSync.setState((state) => ({
+                locationRevision: state.locationRevision + 1,
+            }));
+        }
+    } catch (error) {
+        console.warn("Location indexing failed", error);
+    }
+
+    isLocationIndexRunning = false;
 }
 
 async function runFullSync(): Promise<void> {

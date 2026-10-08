@@ -1,15 +1,20 @@
 import { useNavigation } from "@react-navigation/native";
-import { Images, SquareLibrary } from "lucide-react-native";
+import { Images, MapPinned, SquareLibrary } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AlbumsOverview } from "@/components/AlbumsOverview";
 import { MediaGrid } from "@/components/MediaGrid";
+import { PhotoMap } from "@/components/PhotoMap";
 import { TabButton } from "@/components/TabButton";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
-import { useCollections, useMediaList } from "@/hooks/use-media-items";
+import {
+    useCollections,
+    useLocatedItems,
+    useMediaList,
+} from "@/hooks/use-media-items";
 import { useMediaLibrary } from "@/hooks/use-media-library";
 import type { MediaSource } from "@/lib/database";
 import { cn } from "@/lib/utils";
@@ -17,6 +22,7 @@ import { cn } from "@/lib/utils";
 const ALL_ITEMS: MediaSource = { kind: "all" };
 const HEADER_HEIGHT = 52;
 const TAB_BAR_HEIGHT = 56;
+const TAB_TITLES = { photos: "Photos", albums: "Albums", map: "Map" };
 
 export function HomeScreen() {
     const navigation = useNavigation();
@@ -24,7 +30,8 @@ export function HomeScreen() {
     const { isGranted, syncStatus } = useMediaLibrary();
     const { entries, isLoaded } = useMediaList(ALL_ITEMS);
     const overview = useCollections();
-    const [tab, setTab] = useState<"photos" | "albums">("photos");
+    const locatedItems = useLocatedItems();
+    const [tab, setTab] = useState<"photos" | "albums" | "map">("photos");
 
     if (isGranted === undefined) {
         return <View className="flex-1 bg-black" />;
@@ -89,12 +96,28 @@ export function HomeScreen() {
                 />
             </View>
 
+            <View className={cn("flex-1", tab !== "map" && "hidden")}>
+                <PhotoMap
+                    items={locatedItems}
+                    topInset={topInset}
+                    bottomInset={bottomInset}
+                    onPressItem={(id) =>
+                        navigation.navigate("Viewer", {
+                            source: ALL_ITEMS,
+                            index: entries.findIndex(
+                                (entry) => entry.id === id,
+                            ),
+                        })
+                    }
+                />
+            </View>
+
             <View
                 className="absolute inset-x-0 top-0 flex-row items-center justify-between bg-black/90 px-4"
                 style={{ paddingTop: insets.top, height: topInset }}
             >
                 <Text className="text-2xl font-bold text-white">
-                    {tab === "photos" ? "Photos" : "Albums"}
+                    {TAB_TITLES[tab]}
                 </Text>
                 {syncStatus !== "idle" && (
                     <View className="flex-row items-center gap-2">
@@ -121,6 +144,12 @@ export function HomeScreen() {
                     icon={SquareLibrary}
                     isActive={tab === "albums"}
                     onPress={() => setTab("albums")}
+                />
+                <TabButton
+                    label="Map"
+                    icon={MapPinned}
+                    isActive={tab === "map"}
+                    onPress={() => setTab("map")}
                 />
             </View>
         </View>
