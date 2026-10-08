@@ -1,14 +1,14 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
-import { useVideoPlayer, VideoView } from "expo-video";
 import { ChevronLeft, Info, MapPin } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, useWindowDimensions, View } from "react-native";
+import { Pressable, StatusBar, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
+import { VideoPlayback } from "@/components/VideoPlayback";
 import { useMediaDetails, useMediaList } from "@/hooks/use-media-items";
 import type { MediaItem } from "@/lib/database";
 import { formatDuration, formatFullDate, formatTime } from "@/lib/format";
@@ -33,6 +33,7 @@ export function ViewerScreen({
 
     return (
         <View className="flex-1 bg-black">
+            <StatusBar hidden={!isChromeVisible} barStyle="light-content" />
             {entries.length > 0 && (
                 <FlashList
                     data={entries}
@@ -52,42 +53,55 @@ export function ViewerScreen({
                         )
                     }
                     renderItem={({ item: entry, index }) => (
-                        <Pressable
-                            onPress={() =>
-                                setIsChromeVisible((isVisible) => !isVisible)
-                            }
-                            style={{ width, height }}
-                        >
+                        <View style={{ width, height }}>
                             {entry.duration !== null &&
                             index === currentIndex ? (
                                 <VideoPlayback
+                                    key={entry.id}
                                     uri={entry.id}
                                     width={width}
                                     height={height}
+                                    controlsVisible={
+                                        isChromeVisible && !isInfoVisible
+                                    }
+                                    onToggleControls={() =>
+                                        setIsChromeVisible(
+                                            (isVisible) => !isVisible,
+                                        )
+                                    }
                                 />
                             ) : (
-                                <Image
-                                    source={{ uri: entry.id }}
-                                    recyclingKey={entry.id}
-                                    contentFit="contain"
-                                    cachePolicy="memory"
-                                    style={{ width, height }}
-                                />
+                                <Pressable
+                                    onPress={() =>
+                                        setIsChromeVisible(
+                                            (isVisible) => !isVisible,
+                                        )
+                                    }
+                                >
+                                    <Image
+                                        source={{ uri: entry.id }}
+                                        recyclingKey={entry.id}
+                                        contentFit="contain"
+                                        cachePolicy="memory"
+                                        style={{ width, height }}
+                                    />
+                                </Pressable>
                             )}
-                        </Pressable>
+                        </View>
                     )}
                 />
             )}
 
             {isChromeVisible && (
                 <View
-                    className="absolute inset-x-0 top-0 flex-row items-center gap-1 bg-black/60 px-2 pb-2"
-                    style={{ paddingTop: insets.top + 4 }}
+                    className="absolute inset-x-0 top-0 flex-row items-center gap-3 px-4 pb-4"
+                    style={{ paddingTop: insets.top + 8 }}
                 >
                     <Pressable
                         onPress={() => navigation.goBack()}
-                        hitSlop={8}
-                        className="p-2 active:opacity-60"
+                        accessibilityRole="button"
+                        accessibilityLabel="Back to library"
+                        className="h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-neutral-900/90 active:opacity-60"
                     >
                         <Icon
                             as={ChevronLeft}
@@ -96,7 +110,7 @@ export function ViewerScreen({
                         />
                     </Pressable>
 
-                    <View className="flex-1 items-center">
+                    <View className="flex-1 items-center rounded-3xl bg-black/60 px-3 py-2">
                         {takenAt !== null && (
                             <>
                                 <Text
@@ -129,8 +143,10 @@ export function ViewerScreen({
                         onPress={() =>
                             setIsInfoVisible((isVisible) => !isVisible)
                         }
-                        hitSlop={8}
-                        className="p-2 active:opacity-60"
+                        accessibilityRole="button"
+                        accessibilityLabel="Media information"
+                        accessibilityState={{ selected: isInfoVisible }}
+                        className="h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-neutral-900/90 active:opacity-60"
                     >
                         <Icon
                             as={Info}
@@ -151,27 +167,6 @@ export function ViewerScreen({
                 />
             )}
         </View>
-    );
-}
-
-type VideoPlaybackProps = {
-    uri: string;
-    width: number;
-    height: number;
-};
-
-function VideoPlayback({ uri, width, height }: VideoPlaybackProps) {
-    const player = useVideoPlayer(uri, (videoPlayer) => {
-        videoPlayer.play();
-    });
-
-    return (
-        <VideoView
-            player={player}
-            nativeControls
-            contentFit="contain"
-            style={{ width, height }}
-        />
     );
 }
 
