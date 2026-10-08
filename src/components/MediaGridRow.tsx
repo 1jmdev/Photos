@@ -23,7 +23,7 @@ type MediaGridRowProps = {
     spacing: number;
     origins?: Map<number, MediaGridOrigin>;
     offset: number;
-    loadingEnabled: boolean;
+    priority: "high" | "low";
     onPressItem: (index: number) => void;
 };
 
@@ -33,7 +33,7 @@ export const MediaGridRow = memo(function MediaGridRow({
     spacing,
     origins,
     offset,
-    loadingEnabled,
+    priority,
     onPressItem,
 }: MediaGridRowProps) {
     const { getMappingKey } = useMappingHelper();
@@ -111,7 +111,7 @@ export const MediaGridRow = memo(function MediaGridRow({
                             <MediaThumbnail
                                 uri={entry.id}
                                 size={size}
-                                loadingEnabled={loadingEnabled}
+                                priority={priority}
                             />
                             {entry.duration !== null && (
                                 <Text

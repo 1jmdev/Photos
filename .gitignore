@@ -10,6 +10,8 @@ web-build/
 expo-env.d.ts
 
 # Native
+.gradle/
+.cxx/
 .kotlin/
 *.orig.*
 *.jks
@@ -41,3 +43,8 @@ app-example
 # generated native folders
 /ios
 /android
+/modules/*/android/build/
+/modules/*/ios/build/
+/modules/*/ios/Pods/
+DerivedData/
+xcuserdata/

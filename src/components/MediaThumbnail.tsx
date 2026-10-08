@@ -1,39 +1,69 @@
-import { useRecyclingState } from "@shopify/flash-list";
 import { Image } from "expo-image";
-import { memo } from "react";
+import { requireNativeModule } from "expo-modules-core";
+import { memo, useEffect, useRef } from "react";
+import { PixelRatio, Platform } from "react-native";
+
+if (Platform.OS === "android" || Platform.OS === "ios") {
+    requireNativeModule("MediaThumbnails");
+}
 
 type MediaThumbnailProps = {
     uri: string;
     size: number;
-    loadingEnabled: boolean;
+    priority: "high" | "low";
+    borderRadius?: number;
 };
 
 export const MediaThumbnail = memo(function MediaThumbnail({
     uri,
     size,
-    loadingEnabled,
+    priority,
+    borderRadius = 0,
 }: MediaThumbnailProps) {
-    const [loadedUri, setLoadedUri] = useRecyclingState<string | null>(null, [
-        uri,
-    ]);
+    const imageRef = useRef<Image>(null);
+    const previousRequest = useRef({ uri, priority });
+    const resolution = Math.min(
+        384,
+        PixelRatio.getPixelSizeForLayoutSize(size),
+    );
+
+    useEffect(() => {
+        if (
+            Platform.OS === "android" &&
+            previousRequest.current.uri === uri &&
+            previousRequest.current.priority === "low" &&
+            priority === "high"
+        ) {
+            void imageRef.current?.reloadAsync();
+        }
+        previousRequest.current = { uri, priority };
+    }, [uri, priority]);
 
     return (
         <Image
-            source={
-                loadingEnabled || loadedUri === uri
-                    ? {
-                          uri,
-                          cacheKey: `thumbnail:${uri}`,
-                      }
-                    : null
-            }
+            ref={imageRef}
+            source={{
+                uri:
+                    Platform.OS === "ios"
+                        ? `gallery-thumbnail:///${encodeURIComponent(uri.slice(5))}?size=${resolution}`
+                        : Platform.OS === "android"
+                          ? `content://gallery-thumbnail/${encodeURIComponent(uri)}`
+                          : uri,
+                width: resolution,
+                height: resolution,
+            }}
             recyclingKey={uri}
             contentFit="cover"
             cachePolicy="memory-disk"
-            priority="high"
+            priority={priority}
+            transition={0}
             enforceEarlyResizing
-            onLoad={() => setLoadedUri(uri, true)}
-            style={{ width: size, height: size, backgroundColor: "#171717" }}
+            style={{
+                width: size,
+                height: size,
+                borderRadius,
+                backgroundColor: "#171717",
+            }}
         />
     );
 });

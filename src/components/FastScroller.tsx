@@ -33,7 +33,6 @@ type FastScrollerProps = {
     bottom: number;
     contentHeight: number;
     onScrollToOffset: (offset: number) => void;
-    onDraggingChange: (isDragging: boolean) => void;
     /** Returns the label shown next to the thumb while it is dragged. */
     resolveLabel: (offset: number) => string | null;
 };
@@ -49,7 +48,6 @@ export function FastScroller({
     bottom,
     contentHeight,
     onScrollToOffset,
-    onDraggingChange,
     resolveLabel,
 }: FastScrollerProps) {
     const fraction = useSharedValue(0);
@@ -121,7 +119,6 @@ export function FastScroller({
 
     function beginDrag() {
         isDragging.current = true;
-        onDraggingChange(true);
         reveal();
         setLabel(
             resolveLabel(
@@ -133,7 +130,6 @@ export function FastScroller({
 
     function finishDrag() {
         isDragging.current = false;
-        onDraggingChange(false);
         setLabel(null);
         scheduleHide();
     }

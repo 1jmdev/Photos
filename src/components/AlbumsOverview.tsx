@@ -1,8 +1,8 @@
 import { FlashList } from "@shopify/flash-list";
-import { Image } from "expo-image";
 import { Images } from "lucide-react-native";
 import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 
+import { MediaThumbnail } from "@/components/MediaThumbnail";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { type Collection, getSourceKey } from "@/lib/database";
@@ -119,17 +119,11 @@ function CollectionCard({ collection, size, onPress }: CollectionCardProps) {
             style={{ width: size }}
         >
             {collection.coverId ? (
-                <Image
-                    source={{ uri: collection.coverId }}
-                    recyclingKey={collection.coverId}
-                    contentFit="cover"
-                    cachePolicy="memory"
-                    style={{
-                        width: size,
-                        height: size,
-                        borderRadius: 14,
-                        backgroundColor: "#171717",
-                    }}
+                <MediaThumbnail
+                    uri={collection.coverId}
+                    size={size}
+                    priority="high"
+                    borderRadius={14}
                 />
             ) : (
                 <View

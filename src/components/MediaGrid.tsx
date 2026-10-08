@@ -1,5 +1,5 @@
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
-import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactElement, useMemo, useRef, useState } from "react";
 import type {
     NativeScrollEvent,
     NativeSyntheticEvent,
@@ -34,8 +34,9 @@ import {
 
 const TILE_SPACING = 2;
 const HEADER_HEIGHT = PixelRatio.roundToNearestPixel(44);
+const PRELOAD_ROW_COUNT = 4;
 const VIEWABILITY_CONFIG = {
-    minimumViewTime: 120,
+    minimumViewTime: 0,
     itemVisiblePercentThreshold: 1,
 };
 function GridScrollView(props: ScrollViewProps) {
@@ -143,7 +144,7 @@ export function MediaGrid({
                 rowIndex++
             ) {
                 const row = items[rowIndex];
-                const y = row.offset + topInset - scrollState.current.offset;
+                const y = row.offset + topInset - scrollOffset.current;
 
                 if (y > height) {
                     break;
@@ -158,7 +159,6 @@ export function MediaGrid({
                     });
                 }
             }
-            pauseLoading(false);
             setGalleryScale(nextScale);
         }
     }
@@ -183,74 +183,12 @@ export function MediaGrid({
             scheduleOnRN(setIsPinching, false);
         },
     });
+    const scrollOffset = useRef(0);
     const [visibleKeys, setVisibleKeys] = useState(new Set<string>());
-    const visibleKeysRef = useRef(visibleKeys);
-    const [isLoadingPaused, setIsLoadingPaused] = useState(false);
-    const scrollState = useRef({
-        offset: 0,
-        time: performance.now(),
-        isLoadingPaused: false,
-    });
-    const resumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const isHandleDragging = useRef(false);
-
-    useEffect(
-        () => () => {
-            if (resumeTimer.current) {
-                clearTimeout(resumeTimer.current);
-            }
-        },
-        [],
-    );
-
-    function pauseLoading(paused: boolean) {
-        if (scrollState.current.isLoadingPaused !== paused) {
-            scrollState.current.isLoadingPaused = paused;
-            setIsLoadingPaused(paused);
-            if (!paused) {
-                setVisibleKeys(visibleKeysRef.current);
-            }
-        }
-        if (resumeTimer.current) {
-            clearTimeout(resumeTimer.current);
-        }
-        resumeTimer.current =
-            paused && !isHandleDragging.current
-                ? setTimeout(() => pauseLoading(false), 120)
-                : null;
-    }
 
     function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-        const time = performance.now();
-        const offset = event.nativeEvent.contentOffset.y;
-        const speed =
-            (Math.abs(offset - scrollState.current.offset) * 1000) /
-            (Math.max(1, time - scrollState.current.time) * height);
-
-        pauseLoading(
-            isHandleDragging.current ||
-                speed > (scrollState.current.isLoadingPaused ? 0.75 : 2),
-        );
-        scrollState.current.offset = offset;
-        scrollState.current.time = time;
+        scrollOffset.current = event.nativeEvent.contentOffset.y;
         scrollerRef.current?.handleScroll(event);
-    }
-
-    function resolveLabel(offset: number): string | null {
-        let start = 0;
-        let end = items.length - 1;
-
-        while (start <= end) {
-            const middle = Math.floor((start + end) / 2);
-
-            if (items[middle].offset <= offset - topInset) {
-                start = middle + 1;
-            } else {
-                end = middle - 1;
-            }
-        }
-
-        return items[Math.max(0, end)]?.sectionTitle ?? null;
     }
 
     return (
@@ -263,27 +201,25 @@ export function MediaGrid({
                         ref={listRef}
                         renderScrollComponent={GridScrollView}
                         overrideProps={{ simultaneousWith: pinchGesture }}
-                        scrollEnabled={!isPinching}
                         data={items}
-                        extraData={isLoadingPaused ? null : visibleKeys}
+                        extraData={visibleKeys}
                         keyExtractor={(item) => item.key}
                         getItemType={(item) => item.type}
-                        drawDistance={tileSize * 2}
+                        drawDistance={
+                            (tileSize + TILE_SPACING + HEADER_HEIGHT) *
+                            PRELOAD_ROW_COUNT
+                        }
                         showsVerticalScrollIndicator={false}
                         scrollEventThrottle={16}
                         onScroll={handleScroll}
-                        onMomentumScrollEnd={() =>
-                            pauseLoading(isHandleDragging.current)
-                        }
                         viewabilityConfig={VIEWABILITY_CONFIG}
-                        onViewableItemsChanged={({ viewableItems }) => {
-                            visibleKeysRef.current = new Set(
-                                viewableItems.map((token) => token.key),
-                            );
-                            if (!scrollState.current.isLoadingPaused) {
-                                setVisibleKeys(visibleKeysRef.current);
-                            }
-                        }}
+                        onViewableItemsChanged={({ viewableItems }) =>
+                            setVisibleKeys(
+                                new Set(
+                                    viewableItems.map((token) => token.key),
+                                ),
+                            )
+                        }
                         ListEmptyComponent={empty}
                         contentContainerStyle={{
                             paddingTop: topInset,
@@ -313,10 +249,10 @@ export function MediaGrid({
                                         item.offset -
                                         items[initialScrollIndex].offset
                                     }
-                                    loadingEnabled={
-                                        isPinching ||
-                                        (!isLoadingPaused &&
-                                            visibleKeys.has(item.key))
+                                    priority={
+                                        visibleKeys.has(item.key)
+                                            ? "high"
+                                            : "low"
                                     }
                                     onPressItem={onPressItem}
                                 />
@@ -329,13 +265,12 @@ export function MediaGrid({
                     top={topInset}
                     bottom={bottomInset}
                     contentHeight={contentHeight + topInset + bottomInset}
-                    resolveLabel={resolveLabel}
-                    onDraggingChange={(isDragging) => {
-                        isHandleDragging.current = isDragging;
-                        pauseLoading(isDragging);
-                    }}
+                    resolveLabel={(offset) =>
+                        items[findGridItemIndex(items, offset - topInset)]
+                            ?.sectionTitle ?? null
+                    }
                     onScrollToOffset={(offset) => {
-                        pauseLoading(true);
+                        scrollOffset.current = offset;
                         listRef.current?.scrollToOffset({
                             offset,
                             animated: false,
@@ -345,6 +280,23 @@ export function MediaGrid({
             </View>
         </GestureDetector>
     );
+}
+
+function findGridItemIndex(items: GridItem[], offset: number) {
+    let start = 0;
+    let end = items.length - 1;
+
+    while (start <= end) {
+        const middle = Math.floor((start + end) / 2);
+
+        if (items[middle].offset <= offset) {
+            start = middle + 1;
+        } else {
+            end = middle - 1;
+        }
+    }
+
+    return Math.max(0, end);
 }
 
 function buildGridItems(
