@@ -6,7 +6,8 @@ import type { MediaSource } from "@/lib/database";
 export type RootStackParamList = {
     Home: undefined;
     Album: { source: MediaSource; title: string };
-    Viewer: { source: MediaSource; index: number };
+    Viewer: { source: MediaSource; index: number; focusId?: string };
+    Editor: { id: string };
 };
 
 declare global {

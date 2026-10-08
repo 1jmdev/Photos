@@ -1,10 +1,10 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { FlashList } from "@shopify/flash-list";
+import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { Image } from "expo-image";
 import { Asset } from "expo-media-library";
 import { shareAsync } from "expo-sharing";
-import { Heart, Info, Share2, Trash2 } from "lucide-react-native";
-import { useState } from "react";
+import { Heart, Info, Share2, SquarePen, Trash2 } from "lucide-react-native";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StatusBar, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DismissibleViewer } from "@/components/DismissibleViewer";
@@ -15,22 +15,37 @@ import { VideoPlayback } from "@/components/VideoPlayback";
 import { useMediaDetails, useMediaList } from "@/hooks/use-media-items";
 import { getDatabase } from "@/lib/database";
 import { syncMediaLibraryChange, useMediaSync } from "@/lib/media-sync";
+import { cn } from "@/lib/utils";
 import type { RootStackParamList } from "@/navigation";
 
 export function ViewerScreen({
     navigation,
     route,
 }: NativeStackScreenProps<RootStackParamList, "Viewer">) {
-    const { source, index: initialIndex } = route.params;
+    const { source, index: initialIndex, focusId } = route.params;
     const insets = useSafeAreaInsets();
     const { width, height } = useWindowDimensions();
     const { entries } = useMediaList(source);
+    const listRef = useRef<FlashListRef<(typeof entries)[number]>>(null);
     const [currentIndex, setCurrentIndex] = useState(initialIndex);
     const [isChromeVisible, setIsChromeVisible] = useState(true);
     const [isInfoVisible, setIsInfoVisible] = useState(false);
     const [favoriteUpdates, setFavoriteUpdates] = useState<
         Record<string, { selected: boolean; pending: boolean }>
     >({});
+
+    useEffect(() => {
+        const focusIndex = entries.findIndex((entry) => entry.id === focusId);
+
+        if (focusIndex >= 0) {
+            listRef.current?.scrollToIndex({
+                index: focusIndex,
+                animated: false,
+            });
+            setCurrentIndex(focusIndex);
+            navigation.setParams({ focusId: undefined });
+        }
+    }, [entries, focusId, navigation]);
 
     const currentEntry = entries[Math.min(currentIndex, entries.length - 1)];
     const { item, place } = useMediaDetails(currentEntry?.id);
@@ -45,6 +60,7 @@ export function ViewerScreen({
             <StatusBar hidden={!isChromeVisible} barStyle="light-content" />
             {entries.length > 0 && (
                 <FlashList
+                    ref={listRef}
                     data={entries}
                     horizontal
                     pagingEnabled
@@ -130,6 +146,15 @@ export function ViewerScreen({
                             },
                         },
                         {
+                            icon: SquarePen,
+                            label: "Edit",
+                            selected: false,
+                            onPress: () =>
+                                navigation.navigate("Editor", {
+                                    id: currentEntry.id,
+                                }),
+                        },
+                        {
                             icon: Heart,
                             label: isFavorite ? "Remove favorite" : "Favorite",
                             selected: isFavorite,
@@ -199,13 +224,21 @@ export function ViewerScreen({
                             }
                             onPress={action.onPress}
                             disabled={
-                                action.icon === Heart &&
-                                favoriteUpdates[currentEntry.id]?.pending
+                                (action.icon === Heart &&
+                                    favoriteUpdates[currentEntry.id]
+                                        ?.pending) ||
+                                (action.icon === SquarePen &&
+                                    currentEntry.duration !== null)
                             }
                             accessibilityRole="button"
                             accessibilityLabel={action.label}
                             accessibilityState={{ selected: action.selected }}
-                            className="h-12 w-12 items-center justify-center active:opacity-60"
+                            className={cn(
+                                "h-12 w-12 items-center justify-center active:opacity-60",
+                                action.icon === SquarePen &&
+                                    currentEntry.duration !== null &&
+                                    "opacity-30",
+                            )}
                         >
                             <Icon
                                 as={action.icon}

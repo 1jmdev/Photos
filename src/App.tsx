@@ -5,6 +5,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { Stack, theme } from "@/navigation";
 import { AlbumScreen } from "@/screens/Album";
+import { EditorScreen } from "@/screens/Editor";
 import { HomeScreen } from "@/screens/Home";
 import { ViewerScreen } from "@/screens/Viewer";
 
@@ -31,6 +32,11 @@ export default function App() {
                                     backgroundColor: "transparent",
                                 },
                             }}
+                        />
+                        <Stack.Screen
+                            name="Editor"
+                            component={EditorScreen}
+                            options={{ animation: "fade" }}
                         />
                     </Stack.Navigator>
                 </NavigationContainer>
