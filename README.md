@@ -1,50 +1,56 @@
-# Welcome to your Expo app 👋
+# Photos
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A fast, feature-packed gallery app for people who take a lot of photos.
+Built with Expo and React Native, primarily for Android.
 
-## Get started
+## Features
 
-1. Install dependencies
+- **Photo grid** with pinch-to-zoom and a fast scroller
+- **Albums**, videos and favorites
+- **Viewer** with swipe navigation, swipe-down to close, video playback and photo information
+- **Share, favorite and delete** photos
+- **Photo editor** with crop, rotate, flip, brightness, contrast, saturation, warmth and filters, with undo back to the original
+- **Map** of all photos by where they were taken
+- **Fast thumbnails** through native modules
 
-   ```bash
-   npm install
-   ```
+## Tech stack
 
-2. Start the app
+- Expo, React Native, TypeScript
+- NativeWind (Tailwind CSS) for styling
+- expo-media-library for photo access, expo-sqlite for the local index
+- React Native Skia for the editor
+- MapLibre for the map
+- Local Expo modules in `modules/` for thumbnails and locations
 
-   ```bash
-   npx expo start
-   ```
+## Getting started
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Install dependencies:
 
 ```bash
-npm run reset-project
+bun install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Build a release APK:
 
-## Learn more
+```bash
+bun run android:apk
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+## Project structure
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```
+src/
+  screens/     Home, Album, Viewer, Editor
+  components/  Reusable UI components
+  hooks/       Media library and media list hooks
+  lib/         Database, sync, location and editing logic
+modules/       Native Expo modules (Android)
+```
 
-## Join the community
+## Scripts
 
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+| Command          | Description               |
+| ---------------- | ------------------------- |
+| `bun run start`  | Start the Expo dev server |
+| `bun run check`  | Lint and format check     |
+| `bun run format` | Format and fix the code   |
