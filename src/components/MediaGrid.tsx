@@ -1,30 +1,36 @@
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
-import { Image } from "expo-image";
-import { type ReactElement, useMemo, useRef } from "react";
-import { Pressable, useWindowDimensions, View } from "react-native";
+import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
+import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
+import { PixelRatio, useWindowDimensions, View } from "react-native";
 
 import {
     FastScroller,
     type FastScrollerHandle,
 } from "@/components/FastScroller";
+import {
+    MediaGridRow,
+    type MediaGridRowEntry,
+} from "@/components/MediaGridRow";
 import { Text } from "@/components/ui/text";
 import type { MediaListEntry } from "@/lib/database";
-import { formatDayTitle, formatDuration, getDayKey } from "@/lib/format";
+import { formatDayTitle, getDayKey } from "@/lib/format";
 
 const COLUMN_COUNT = 4;
 const TILE_SPACING = 2;
-const HEADER_HEIGHT = 44;
+const HEADER_HEIGHT = PixelRatio.roundToNearestPixel(44);
+const VIEWABILITY_CONFIG = {
+    minimumViewTime: 120,
+    itemVisiblePercentThreshold: 1,
+};
 
 type GridItem =
-    | { type: "header"; key: string; title: string }
+    | { type: "header"; key: string; sectionTitle: string; offset: number }
     | {
-          type: "media";
+          type: "row";
           key: string;
-          entry: MediaListEntry;
-          /** Position of the item in the media list, used by the viewer. */
-          index: number;
-          column: number;
+          entries: MediaGridRowEntry[];
           sectionTitle: string;
+          offset: number;
       };
 
 type MediaGridProps = {
@@ -47,23 +53,82 @@ export function MediaGrid({
     topInset = 0,
     bottomInset = 0,
 }: MediaGridProps) {
-    const { width } = useWindowDimensions();
+    const { width, height } = useWindowDimensions();
     const listRef = useRef<FlashListRef<GridItem>>(null);
     const scrollerRef = useRef<FastScrollerHandle>(null);
-    const items = useMemo(() => buildGridItems(entries), [entries]);
-
-    // Every column cell is `width / COLUMN_COUNT` wide. Offsetting each tile
-    // by a quarter of the spacing per column distributes the gaps evenly.
     const tileSize = (width - TILE_SPACING * (COLUMN_COUNT - 1)) / COLUMN_COUNT;
+    const { items, contentHeight } = useMemo(
+        () => buildGridItems(entries, tileSize),
+        [entries, tileSize],
+    );
+    const [visibleKeys, setVisibleKeys] = useState(new Set<string>());
+    const visibleKeysRef = useRef(visibleKeys);
+    const [isLoadingPaused, setIsLoadingPaused] = useState(false);
+    const scrollState = useRef({
+        offset: 0,
+        time: performance.now(),
+        isLoadingPaused: false,
+    });
+    const resumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isHandleDragging = useRef(false);
 
-    function resolveLabel(): string | null {
-        const item = items[listRef.current?.getFirstVisibleIndex() ?? 0];
+    useEffect(
+        () => () => {
+            if (resumeTimer.current) {
+                clearTimeout(resumeTimer.current);
+            }
+        },
+        [],
+    );
 
-        if (!item) {
-            return null;
+    function pauseLoading(paused: boolean) {
+        if (scrollState.current.isLoadingPaused !== paused) {
+            scrollState.current.isLoadingPaused = paused;
+            setIsLoadingPaused(paused);
+            if (!paused) {
+                setVisibleKeys(visibleKeysRef.current);
+            }
+        }
+        if (resumeTimer.current) {
+            clearTimeout(resumeTimer.current);
+        }
+        resumeTimer.current =
+            paused && !isHandleDragging.current
+                ? setTimeout(() => pauseLoading(false), 120)
+                : null;
+    }
+
+    function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+        const time = performance.now();
+        const offset = event.nativeEvent.contentOffset.y;
+        const speed =
+            (Math.abs(offset - scrollState.current.offset) * 1000) /
+            (Math.max(1, time - scrollState.current.time) * height);
+
+        pauseLoading(
+            isHandleDragging.current ||
+                speed > (scrollState.current.isLoadingPaused ? 0.75 : 2),
+        );
+        scrollState.current.offset = offset;
+        scrollState.current.time = time;
+        scrollerRef.current?.handleScroll(event);
+    }
+
+    function resolveLabel(offset: number): string | null {
+        let start = 0;
+        let end = items.length - 1;
+
+        while (start <= end) {
+            const middle = Math.floor((start + end) / 2);
+
+            if (items[middle].offset <= offset - topInset) {
+                start = middle + 1;
+            } else {
+                end = middle - 1;
+            }
         }
 
-        return item.type === "header" ? item.title : item.sectionTitle;
+        return items[Math.max(0, end)]?.sectionTitle ?? null;
     }
 
     return (
@@ -71,17 +136,25 @@ export function MediaGrid({
             <FlashList
                 ref={listRef}
                 data={items}
-                numColumns={COLUMN_COUNT}
+                extraData={isLoadingPaused ? null : visibleKeys}
                 keyExtractor={(item) => item.key}
                 getItemType={(item) => item.type}
-                overrideItemLayout={(layout, item) => {
-                    if (item.type === "header") {
-                        layout.span = COLUMN_COUNT;
+                drawDistance={tileSize * 2}
+                showsVerticalScrollIndicator={false}
+                scrollEventThrottle={16}
+                onScroll={handleScroll}
+                onMomentumScrollEnd={() =>
+                    pauseLoading(isHandleDragging.current)
+                }
+                viewabilityConfig={VIEWABILITY_CONFIG}
+                onViewableItemsChanged={({ viewableItems }) => {
+                    visibleKeysRef.current = new Set(
+                        viewableItems.map((token) => token.key),
+                    );
+                    if (!scrollState.current.isLoadingPaused) {
+                        setVisibleKeys(visibleKeysRef.current);
                     }
                 }}
-                drawDistance={tileSize * 6}
-                showsVerticalScrollIndicator={false}
-                onScroll={(event) => scrollerRef.current?.handleScroll(event)}
                 ListEmptyComponent={empty}
                 contentContainerStyle={{
                     paddingTop: topInset,
@@ -94,43 +167,19 @@ export function MediaGrid({
                             style={{ height: HEADER_HEIGHT }}
                         >
                             <Text className="text-sm font-semibold text-white">
-                                {item.title}
+                                {item.sectionTitle}
                             </Text>
                         </View>
                     ) : (
-                        <Pressable
-                            onPress={() => onPressItem(item.index)}
-                            style={{
-                                width: tileSize,
-                                height: tileSize,
-                                marginLeft:
-                                    (item.column * TILE_SPACING) / COLUMN_COUNT,
-                                marginBottom: TILE_SPACING,
-                            }}
-                        >
-                            <Image
-                                source={{ uri: item.entry.id }}
-                                recyclingKey={item.entry.id}
-                                contentFit="cover"
-                                cachePolicy="memory"
-                                style={{
-                                    width: tileSize,
-                                    height: tileSize,
-                                    backgroundColor: "#171717",
-                                }}
-                            />
-                            {item.entry.duration !== null && (
-                                <Text
-                                    className="absolute bottom-1 right-1.5 text-xs font-semibold text-white"
-                                    style={{
-                                        textShadowColor: "rgba(0, 0, 0, 0.7)",
-                                        textShadowRadius: 3,
-                                    }}
-                                >
-                                    {formatDuration(item.entry.duration)}
-                                </Text>
-                            )}
-                        </Pressable>
+                        <MediaGridRow
+                            entries={item.entries}
+                            size={tileSize}
+                            spacing={TILE_SPACING}
+                            loadingEnabled={
+                                !isLoadingPaused && visibleKeys.has(item.key)
+                            }
+                            onPressItem={onPressItem}
+                        />
                     )
                 }
             />
@@ -138,20 +187,31 @@ export function MediaGrid({
                 ref={scrollerRef}
                 top={topInset}
                 bottom={bottomInset}
+                contentHeight={contentHeight + topInset + bottomInset}
                 resolveLabel={resolveLabel}
-                onScrollToOffset={(offset) =>
-                    listRef.current?.scrollToOffset({ offset, animated: false })
-                }
+                onDraggingChange={(isDragging) => {
+                    isHandleDragging.current = isDragging;
+                    pauseLoading(isDragging);
+                }}
+                onScrollToOffset={(offset) => {
+                    pauseLoading(true);
+                    listRef.current?.scrollToOffset({
+                        offset,
+                        animated: false,
+                    });
+                }}
             />
         </View>
     );
 }
 
-function buildGridItems(entries: MediaListEntry[]): GridItem[] {
+function buildGridItems(entries: MediaListEntry[], tileSize: number) {
     const items: GridItem[] = [];
+    const rowHeight = PixelRatio.roundToNearestPixel(tileSize + TILE_SPACING);
     let currentDayKey: number | null = null;
     let sectionTitle = "";
-    let column = 0;
+    let offset = 0;
+    let row: Extract<GridItem, { type: "row" }> | undefined;
 
     entries.forEach((entry, index) => {
         const dayKey = getDayKey(entry.sortTime);
@@ -159,24 +219,29 @@ function buildGridItems(entries: MediaListEntry[]): GridItem[] {
         if (dayKey !== currentDayKey) {
             currentDayKey = dayKey;
             sectionTitle = formatDayTitle(entry.sortTime);
-            column = 0;
+            row = undefined;
             items.push({
                 type: "header",
                 key: `header:${dayKey}`,
-                title: sectionTitle,
+                sectionTitle,
+                offset,
             });
+            offset += HEADER_HEIGHT;
         }
 
-        items.push({
-            type: "media",
-            key: entry.id,
-            entry,
-            index,
-            column,
-            sectionTitle,
-        });
-        column = (column + 1) % COLUMN_COUNT;
+        if (!row || row.entries.length === COLUMN_COUNT) {
+            row = {
+                type: "row",
+                key: entry.id,
+                entries: [],
+                sectionTitle,
+                offset,
+            };
+            items.push(row);
+            offset += rowHeight;
+        }
+        row.entries.push({ entry, index });
     });
 
-    return items;
+    return { items, contentHeight: offset };
 }

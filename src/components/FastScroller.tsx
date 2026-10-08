@@ -8,6 +8,7 @@ import Animated, {
     useSharedValue,
     withTiming,
 } from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
@@ -30,9 +31,11 @@ type FastScrollerProps = {
     ref: Ref<FastScrollerHandle>;
     top: number;
     bottom: number;
+    contentHeight: number;
     onScrollToOffset: (offset: number) => void;
+    onDraggingChange: (isDragging: boolean) => void;
     /** Returns the label shown next to the thumb while it is dragged. */
-    resolveLabel: () => string | null;
+    resolveLabel: (offset: number) => string | null;
 };
 
 /**
@@ -44,7 +47,9 @@ export function FastScroller({
     ref,
     top,
     bottom,
+    contentHeight,
     onScrollToOffset,
+    onDraggingChange,
     resolveLabel,
 }: FastScrollerProps) {
     const fraction = useSharedValue(0);
@@ -52,8 +57,9 @@ export function FastScroller({
     const activity = useSharedValue(0);
     const trackHeight = useSharedValue(0);
 
-    const metrics = useRef({ contentHeight: 0, viewportHeight: 0 });
-    const dragStartFraction = useRef(0);
+    const viewportHeight = useSharedValue(0);
+    const dragStartFraction = useSharedValue(0);
+    const lastUpdateTime = useSharedValue(0);
     const isDragging = useRef(false);
     const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -84,18 +90,12 @@ export function FastScroller({
 
     useImperativeHandle(ref, () => ({
         handleScroll(event) {
-            const { contentOffset, contentSize, layoutMeasurement } =
-                event.nativeEvent;
-            const scrollableHeight =
-                contentSize.height - layoutMeasurement.height;
+            const { contentOffset, layoutMeasurement } = event.nativeEvent;
+            const scrollableHeight = contentHeight - layoutMeasurement.height;
 
-            metrics.current = {
-                contentHeight: contentSize.height,
-                viewportHeight: layoutMeasurement.height,
-            };
+            viewportHeight.value = layoutMeasurement.height;
             setIsEnabled(
-                contentSize.height >
-                    layoutMeasurement.height * MINIMUM_SCREEN_COUNT,
+                contentHeight > layoutMeasurement.height * MINIMUM_SCREEN_COUNT,
             );
 
             if (isDragging.current) {
@@ -114,18 +114,42 @@ export function FastScroller({
         },
     }));
 
+    function updateDrag(offset: number) {
+        setLabel(resolveLabel(offset));
+        onScrollToOffset(offset);
+    }
+
+    function beginDrag() {
+        isDragging.current = true;
+        onDraggingChange(true);
+        reveal();
+        setLabel(
+            resolveLabel(
+                fraction.value *
+                    Math.max(0, contentHeight - viewportHeight.value),
+            ),
+        );
+    }
+
+    function finishDrag() {
+        isDragging.current = false;
+        onDraggingChange(false);
+        setLabel(null);
+        scheduleHide();
+    }
+
     const panGesture = usePanGesture({
-        runOnJS: true,
         minDistance: 0,
         hitSlop: { left: 24, right: 8, top: 12, bottom: 12 },
         onBegin: () => {
-            isDragging.current = true;
-            dragStartFraction.current = fraction.value;
+            "worklet";
+            dragStartFraction.value = fraction.value;
+            lastUpdateTime.value = 0;
             activity.value = withTiming(1, { duration: 150 });
-            reveal();
-            setLabel(resolveLabel());
+            scheduleOnRN(beginDrag);
         },
         onUpdate: (event) => {
+            "worklet";
             const travel = trackHeight.value - ACTIVE_THUMB_HEIGHT;
 
             if (travel <= 0) {
@@ -136,22 +160,28 @@ export function FastScroller({
                 1,
                 Math.max(
                     0,
-                    dragStartFraction.current + event.translationY / travel,
+                    dragStartFraction.value + event.translationY / travel,
                 ),
             );
-            const { contentHeight, viewportHeight } = metrics.current;
-
             fraction.value = nextFraction;
-            onScrollToOffset(
-                nextFraction * Math.max(0, contentHeight - viewportHeight),
-            );
-            setLabel(resolveLabel());
+            if (Date.now() - lastUpdateTime.value >= 48) {
+                lastUpdateTime.value = Date.now();
+                scheduleOnRN(
+                    updateDrag,
+                    nextFraction *
+                        Math.max(0, contentHeight - viewportHeight.value),
+                );
+            }
         },
         onFinalize: () => {
-            isDragging.current = false;
+            "worklet";
             activity.value = withTiming(0, { duration: 200 });
-            setLabel(null);
-            scheduleHide();
+            scheduleOnRN(
+                updateDrag,
+                fraction.value *
+                    Math.max(0, contentHeight - viewportHeight.value),
+            );
+            scheduleOnRN(finishDrag);
         },
     });
 
