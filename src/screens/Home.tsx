@@ -1,11 +1,12 @@
 import { useNavigation } from "@react-navigation/native";
-import { Images, type LucideIcon, SquareLibrary } from "lucide-react-native";
+import { Images, SquareLibrary } from "lucide-react-native";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AlbumsOverview } from "@/components/AlbumsOverview";
 import { MediaGrid } from "@/components/MediaGrid";
+import { TabButton } from "@/components/TabButton";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
@@ -129,31 +130,5 @@ export function HomeScreen() {
                 />
             </View>
         </View>
-    );
-}
-
-type TabButtonProps = {
-    label: string;
-    icon: LucideIcon;
-    isActive: boolean;
-    onPress: () => void;
-};
-
-function TabButton({ label, icon, isActive, onPress }: TabButtonProps) {
-    const colorClassName = isActive ? "text-white" : "text-neutral-500";
-
-    return (
-        <Pressable
-            onPress={onPress}
-            accessibilityRole="tab"
-            accessibilityLabel={label}
-            accessibilityState={{ selected: isActive }}
-            className="flex-1 items-center justify-center gap-1"
-        >
-            <Icon as={icon} size={22} className={colorClassName} />
-            <Text className={cn("text-xs font-medium", colorClassName)}>
-                {label}
-            </Text>
-        </Pressable>
     );
 }
