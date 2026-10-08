@@ -11,7 +11,6 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, Pressable, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { formatDuration } from "@/lib/format";
@@ -31,7 +30,6 @@ export function VideoPlayback({
     controlsVisible,
     onToggleControls,
 }: VideoPlaybackProps) {
-    const insets = useSafeAreaInsets();
     const player = useVideoPlayer(uri, (videoPlayer) => {
         videoPlayer.timeUpdateEventInterval = 0.1;
         videoPlayer.play();
@@ -83,7 +81,7 @@ export function VideoPlayback({
     const scrubGesture = usePanGesture({
         runOnJS: true,
         minDistance: 0,
-        enabled: duration > 0 && status === "readyToPlay",
+        enabled: duration > 0 && (isScrubbing || status === "readyToPlay"),
         onBegin: (event) => {
             resumeAfterScrubbing.current = player.playing;
             player.pause();
@@ -146,10 +144,10 @@ export function VideoPlayback({
 
             {controlsVisible && (
                 <View
-                    className="absolute inset-x-0 bottom-0 items-center px-5 pt-5"
-                    style={{ paddingBottom: insets.bottom + 16 }}
+                    className="absolute inset-x-0 items-center px-5"
+                    style={{ top: height / 2 - 85 }}
                 >
-                    <View className="w-full max-w-xl rounded-3xl bg-black/60 px-4 pb-3 pt-3">
+                    <View className="w-full max-w-xl px-4 pb-3 pt-3">
                         <View className="flex-row items-center gap-3">
                             <Text className="flex-1 text-xs font-medium tabular-nums text-white">
                                 {formatDuration(currentTime * 1000)}

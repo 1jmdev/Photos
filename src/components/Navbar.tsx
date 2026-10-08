@@ -1,4 +1,4 @@
-import { ChevronLeft, Info } from "lucide-react-native";
+import { ChevronLeft } from "lucide-react-native";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -8,17 +8,10 @@ import { formatFullDate, formatTime } from "@/lib/format";
 
 type NavbarProps = {
     takenAt: number | null;
-    isInfoVisible: boolean;
     onBack: () => void;
-    onToggleInfo: () => void;
 };
 
-export function Navbar({
-    takenAt,
-    isInfoVisible,
-    onBack,
-    onToggleInfo,
-}: NavbarProps) {
+export function Navbar({ takenAt, onBack }: NavbarProps) {
     const insets = useSafeAreaInsets();
 
     return (
@@ -48,19 +41,7 @@ export function Navbar({
                     </Text>
                 )}
             </View>
-            <Pressable
-                onPress={onToggleInfo}
-                accessibilityRole="button"
-                accessibilityLabel="Media information"
-                accessibilityState={{ selected: isInfoVisible }}
-                className="h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/60 active:opacity-60"
-            >
-                <Icon
-                    as={Info}
-                    size={22}
-                    className={isInfoVisible ? "text-sky-400" : "text-white"}
-                />
-            </Pressable>
+            <View className="w-12" />
         </View>
     );
 }

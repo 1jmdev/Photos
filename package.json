@@ -48,6 +48,7 @@
         "expo-image": "~57.0.5",
         "expo-location": "~57.0.20",
         "expo-media-library": "~57.0.5",
+        "expo-sharing": "~57.0.22",
         "expo-splash-screen": "~57.0.9",
         "expo-sqlite": "~57.0.3",
         "expo-system-ui": "~57.0.4",

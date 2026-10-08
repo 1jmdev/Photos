@@ -51,7 +51,8 @@
             ],
             "expo-image",
             "expo-sqlite",
-            "expo-video"
+            "expo-video",
+            "expo-sharing"
         ],
         "experiments": {
             "reactCompiler": true,

@@ -1,14 +1,20 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
+import { Asset } from "expo-media-library";
+import { shareAsync } from "expo-sharing";
+import { Heart, Info, Share2, Trash2 } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, StatusBar, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DismissibleViewer } from "@/components/DismissibleViewer";
 import { MediaInformation } from "@/components/MediaInformation";
 import { Navbar } from "@/components/Navbar";
+import { Icon } from "@/components/ui/icon";
 import { VideoPlayback } from "@/components/VideoPlayback";
 import { useMediaDetails, useMediaList } from "@/hooks/use-media-items";
+import { getDatabase } from "@/lib/database";
+import { syncMediaLibraryChange, useMediaSync } from "@/lib/media-sync";
 import type { RootStackParamList } from "@/navigation";
 
 export function ViewerScreen({
@@ -89,22 +95,100 @@ export function ViewerScreen({
             )}
 
             {isChromeVisible && (
-                <Navbar
-                    takenAt={takenAt}
-                    isInfoVisible={isInfoVisible}
-                    onBack={() => navigation.goBack()}
-                    onToggleInfo={() =>
-                        setIsInfoVisible((isVisible) => !isVisible)
-                    }
-                />
+                <Navbar takenAt={takenAt} onBack={() => navigation.goBack()} />
             )}
 
             {isChromeVisible && isInfoVisible && item && (
                 <MediaInformation
                     item={item}
                     place={place}
-                    bottomInset={insets.bottom}
+                    bottomInset={insets.bottom + 64}
                 />
+            )}
+
+            {isChromeVisible && item && (
+                <View
+                    className="absolute inset-x-0 bottom-0 flex-row items-center justify-around bg-black/60 pt-2"
+                    style={{ paddingBottom: insets.bottom + 8 }}
+                >
+                    {[
+                        {
+                            icon: Share2,
+                            label: "Share",
+                            selected: false,
+                            onPress: async () => {
+                                await shareAsync(
+                                    await new Asset(item.id).getUri(),
+                                );
+                            },
+                        },
+                        {
+                            icon: Heart,
+                            label: item.isFavorite
+                                ? "Remove favorite"
+                                : "Favorite",
+                            selected: item.isFavorite,
+                            onPress: async () => {
+                                await new Asset(item.id).setFavorite(
+                                    !item.isFavorite,
+                                );
+                                await (await getDatabase()).runAsync(
+                                    "UPDATE media_items SET is_favorite = ? WHERE id = ?",
+                                    item.isFavorite ? 0 : 1,
+                                    item.id,
+                                );
+                                useMediaSync.setState((state) => ({
+                                    revision: state.revision + 1,
+                                }));
+                            },
+                        },
+                        {
+                            icon: Info,
+                            label: "Media information",
+                            selected: isInfoVisible,
+                            onPress: () =>
+                                setIsInfoVisible((visible) => !visible),
+                        },
+                        {
+                            icon: Trash2,
+                            label: "Delete",
+                            selected: false,
+                            onPress: async () => {
+                                await new Asset(item.id).delete();
+                                syncMediaLibraryChange({
+                                    hasIncrementalChanges: true,
+                                    insertedAssets: [],
+                                    deletedAssets: [item.id],
+                                });
+                                navigation.goBack();
+                            },
+                        },
+                    ].map((action) => (
+                        <Pressable
+                            key={action.label}
+                            onPress={action.onPress}
+                            accessibilityRole="button"
+                            accessibilityLabel={action.label}
+                            accessibilityState={{ selected: action.selected }}
+                            className="h-12 w-12 items-center justify-center active:opacity-60"
+                        >
+                            <Icon
+                                as={action.icon}
+                                size={24}
+                                fill={
+                                    action.icon === Heart && action.selected
+                                        ? "white"
+                                        : "none"
+                                }
+                                className={
+                                    action.selected && action.icon === Info
+                                        ? "text-sky-400"
+                                        : "text-white"
+                                }
+                            />
+                        </Pressable>
+                    ))}
+                </View>
             )}
         </DismissibleViewer>
     );

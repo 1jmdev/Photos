@@ -117,8 +117,9 @@ export type MediaDetails = {
 
 /** Returns the stored metadata of an item and the place where it was taken. */
 export function useMediaDetails(itemId: string | undefined): MediaDetails {
+    const revision = useMediaSync((state) => state.revision);
     const [details, setDetails] = useState<
-        (MediaDetails & { itemId: string }) | null
+        (MediaDetails & { itemId: string; revision: number }) | null
     >(null);
 
     useEffect(() => {
@@ -131,7 +132,7 @@ export function useMediaDetails(itemId: string | undefined): MediaDetails {
         readMediaItem(itemId)
             .then((item) => {
                 if (isActive) {
-                    setDetails({ itemId, item, place: undefined });
+                    setDetails({ itemId, revision, item, place: undefined });
                 }
 
                 return resolvePlace(itemId);
@@ -152,7 +153,7 @@ export function useMediaDetails(itemId: string | undefined): MediaDetails {
         return () => {
             isActive = false;
         };
-    }, [itemId]);
+    }, [itemId, revision]);
 
     if (!details || details.itemId !== itemId) {
         return { item: null, place: undefined };
