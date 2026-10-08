@@ -1,6 +1,10 @@
+import {
+    getForegroundPermissionsAsync,
+    requestForegroundPermissionsAsync,
+} from "expo-location";
 import { addListener, usePermissions } from "expo-media-library";
 import { useEffect } from "react";
-import { AppState, Linking } from "react-native";
+import { AppState } from "react-native";
 
 import {
     type SyncStatus,
@@ -14,7 +18,6 @@ export type MediaLibraryState = {
     /** `undefined` while the permission status is being read. */
     isGranted: boolean | undefined;
     syncStatus: SyncStatus;
-    requestPermission: () => Promise<void>;
 };
 
 /**
@@ -28,6 +31,22 @@ export function useMediaLibrary(): MediaLibraryState {
     });
     const status = useMediaSync((state) => state.status);
     const isGranted = permission?.granted;
+
+    useEffect(() => {
+        if (!permission) {
+            return;
+        }
+
+        if (permission.status === "undetermined") {
+            void askForPermission();
+        } else {
+            void getForegroundPermissionsAsync().then((locationPermission) => {
+                if (locationPermission.status === "undetermined") {
+                    return requestForegroundPermissionsAsync();
+                }
+            });
+        }
+    }, [permission, askForPermission]);
 
     useEffect(() => {
         if (!isGranted) {
@@ -52,18 +71,8 @@ export function useMediaLibrary(): MediaLibraryState {
         };
     }, [isGranted]);
 
-    async function requestPermission(): Promise<void> {
-        if (permission && !permission.canAskAgain) {
-            await Linking.openSettings();
-            return;
-        }
-
-        await askForPermission();
-    }
-
     return {
         isGranted,
         syncStatus: status,
-        requestPermission,
     };
 }

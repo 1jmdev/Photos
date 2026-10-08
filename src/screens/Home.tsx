@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AlbumsOverview } from "@/components/AlbumsOverview";
 import { MediaGrid } from "@/components/MediaGrid";
 import { TabButton } from "@/components/TabButton";
-import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { useCollections, useMediaList } from "@/hooks/use-media-items";
@@ -22,7 +21,7 @@ const TAB_BAR_HEIGHT = 56;
 export function HomeScreen() {
     const navigation = useNavigation();
     const insets = useSafeAreaInsets();
-    const { isGranted, syncStatus, requestPermission } = useMediaLibrary();
+    const { isGranted, syncStatus } = useMediaLibrary();
     const { entries, isLoaded } = useMediaList(ALL_ITEMS);
     const overview = useCollections();
     const [tab, setTab] = useState<"photos" | "albums">("photos");
@@ -39,12 +38,9 @@ export function HomeScreen() {
                     Access your photos
                 </Text>
                 <Text className="text-center text-sm text-neutral-400">
-                    Allow access to your library to browse your photos, videos
-                    and albums.
+                    Enable photo library access in system settings to browse
+                    your photos, videos and albums.
                 </Text>
-                <Button className="mt-2" onPress={requestPermission}>
-                    <Text>Allow access</Text>
-                </Button>
             </View>
         );
     }

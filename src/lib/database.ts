@@ -20,6 +20,8 @@ export type MediaListEntry = {
     id: string;
     sortTime: number;
     duration: number | null;
+    takenAt: number | null;
+    isFavorite: boolean;
 };
 
 export type MediaSource =
@@ -191,9 +193,11 @@ export async function readMediaList(
     const database = await getDatabase();
     const filter = getSourceFilter(source);
     const row = await database.getFirstAsync<{ entries: string }>(
-        `SELECT json_group_array(json_array(id, sort_time, duration)) AS entries
+        `SELECT json_group_array(json_array(id, sort_time, duration, taken_at, is_favorite)) AS entries
         FROM (
-            SELECT media_items.id, sort_time, duration FROM media_items
+            SELECT media_items.id, sort_time, duration,
+                COALESCE(creation_time, modification_time) AS taken_at, is_favorite
+            FROM media_items
             ${filter.join}
             WHERE ${filter.where}
             ORDER BY sort_time DESC, media_items.id DESC
@@ -209,12 +213,16 @@ export async function readMediaList(
         string,
         number,
         number | null,
+        number | null,
+        number,
     ][];
 
-    return entries.map(([id, sortTime, duration]) => ({
+    return entries.map(([id, sortTime, duration, takenAt, isFavorite]) => ({
         id,
         sortTime,
         duration,
+        takenAt,
+        isFavorite: isFavorite === 1,
     }));
 }
 
@@ -427,7 +435,7 @@ async function upsertMediaItems(
                 item.width,
                 item.height,
                 item.duration,
-                item.isFavorite ? 1 : 0,
+                0,
                 item.creationTime,
                 item.modificationTime,
                 item.creationTime ?? item.modificationTime ?? 0,
@@ -457,7 +465,6 @@ async function upsertMediaItems(
                 width = excluded.width,
                 height = excluded.height,
                 duration = excluded.duration,
-                is_favorite = excluded.is_favorite,
                 creation_time = excluded.creation_time,
                 modification_time = excluded.modification_time,
                 sort_time = excluded.sort_time`,

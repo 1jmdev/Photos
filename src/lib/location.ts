@@ -1,7 +1,6 @@
 import {
     getForegroundPermissionsAsync,
     type LocationGeocodedAddress,
-    requestForegroundPermissionsAsync,
     reverseGeocodeAsync,
 } from "expo-location";
 import { Asset } from "expo-media-library";
@@ -55,7 +54,7 @@ export async function resolvePlace(itemId: string): Promise<Place> {
         return { coordinate, ...cachedName };
     }
 
-    if (!(await hasLocationPermission())) {
+    if (!(await getForegroundPermissionsAsync()).granted) {
         return { coordinate, locality: null, address: null };
     }
 
@@ -89,22 +88,6 @@ async function readItemCoordinate(itemId: string): Promise<Coordinate | null> {
     }
 }
 
-async function hasLocationPermission(): Promise<boolean> {
-    const permission = await getForegroundPermissionsAsync();
-
-    if (permission.granted || !permission.canAskAgain) {
-        return permission.granted;
-    }
-
-    const request = await requestForegroundPermissionsAsync();
-
-    return request.granted;
-}
-
-/**
- * Produces "Nehvizdy, Czechia" as the locality and
- * "Vinohradská 325, 250 81 Nehvizdy, Czechia" as the address.
- */
 function formatPlaceName(address: LocationGeocodedAddress): PlaceName {
     const city = address.city ?? address.subregion ?? address.region;
     const street = joinParts([address.street, address.streetNumber], " ");

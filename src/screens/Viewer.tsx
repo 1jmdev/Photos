@@ -28,10 +28,17 @@ export function ViewerScreen({
     const [currentIndex, setCurrentIndex] = useState(initialIndex);
     const [isChromeVisible, setIsChromeVisible] = useState(true);
     const [isInfoVisible, setIsInfoVisible] = useState(false);
+    const [favoriteUpdates, setFavoriteUpdates] = useState<
+        Record<string, { selected: boolean; pending: boolean }>
+    >({});
 
     const currentEntry = entries[Math.min(currentIndex, entries.length - 1)];
     const { item, place } = useMediaDetails(currentEntry?.id);
-    const takenAt = item?.creationTime ?? item?.modificationTime ?? null;
+    const takenAt = currentEntry?.takenAt ?? null;
+    const isFavorite = currentEntry
+        ? (favoriteUpdates[currentEntry.id]?.selected ??
+          currentEntry.isFavorite)
+        : false;
 
     return (
         <DismissibleViewer onDismiss={() => navigation.goBack()}>
@@ -106,7 +113,7 @@ export function ViewerScreen({
                 />
             )}
 
-            {isChromeVisible && item && (
+            {isChromeVisible && currentEntry && (
                 <View
                     className="absolute inset-x-0 bottom-0 flex-row items-center justify-around bg-black/60 pt-2"
                     style={{ paddingBottom: insets.bottom + 8 }}
@@ -118,25 +125,45 @@ export function ViewerScreen({
                             selected: false,
                             onPress: async () => {
                                 await shareAsync(
-                                    await new Asset(item.id).getUri(),
+                                    await new Asset(currentEntry.id).getUri(),
                                 );
                             },
                         },
                         {
                             icon: Heart,
-                            label: item.isFavorite
-                                ? "Remove favorite"
-                                : "Favorite",
-                            selected: item.isFavorite,
+                            label: isFavorite ? "Remove favorite" : "Favorite",
+                            selected: isFavorite,
                             onPress: async () => {
-                                await new Asset(item.id).setFavorite(
-                                    !item.isFavorite,
-                                );
-                                await (await getDatabase()).runAsync(
-                                    "UPDATE media_items SET is_favorite = ? WHERE id = ?",
-                                    item.isFavorite ? 0 : 1,
-                                    item.id,
-                                );
+                                setFavoriteUpdates((updates) => ({
+                                    ...updates,
+                                    [currentEntry.id]: {
+                                        selected: !isFavorite,
+                                        pending: true,
+                                    },
+                                }));
+                                try {
+                                    await (await getDatabase()).runAsync(
+                                        "UPDATE media_items SET is_favorite = ? WHERE id = ?",
+                                        isFavorite ? 0 : 1,
+                                        currentEntry.id,
+                                    );
+                                } catch {
+                                    setFavoriteUpdates((updates) => ({
+                                        ...updates,
+                                        [currentEntry.id]: {
+                                            selected: isFavorite,
+                                            pending: false,
+                                        },
+                                    }));
+                                    return;
+                                }
+                                setFavoriteUpdates((updates) => ({
+                                    ...updates,
+                                    [currentEntry.id]: {
+                                        selected: !isFavorite,
+                                        pending: false,
+                                    },
+                                }));
                                 useMediaSync.setState((state) => ({
                                     revision: state.revision + 1,
                                 }));
@@ -154,19 +181,27 @@ export function ViewerScreen({
                             label: "Delete",
                             selected: false,
                             onPress: async () => {
-                                await new Asset(item.id).delete();
+                                await new Asset(currentEntry.id).delete();
                                 syncMediaLibraryChange({
                                     hasIncrementalChanges: true,
                                     insertedAssets: [],
-                                    deletedAssets: [item.id],
+                                    deletedAssets: [currentEntry.id],
                                 });
                                 navigation.goBack();
                             },
                         },
                     ].map((action) => (
                         <Pressable
-                            key={action.label}
+                            key={
+                                action.icon === Heart
+                                    ? "Favorite"
+                                    : action.label
+                            }
                             onPress={action.onPress}
+                            disabled={
+                                action.icon === Heart &&
+                                favoriteUpdates[currentEntry.id]?.pending
+                            }
                             accessibilityRole="button"
                             accessibilityLabel={action.label}
                             accessibilityState={{ selected: action.selected }}
