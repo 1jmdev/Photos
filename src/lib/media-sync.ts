@@ -7,6 +7,7 @@ import {
     Query,
 } from "expo-media-library";
 import { Platform } from "react-native";
+import { create } from "zustand";
 
 import {
     type IndexUpdate,
@@ -43,23 +44,13 @@ type DeviceQueryOptions = {
 /** Newest items indexed first on a fresh install so the grid appears at once. */
 const FIRST_PAGE_SIZE = 400;
 
-let syncState: SyncState = { revision: 0, status: "idle" };
-const syncListeners = new Set<() => void>();
+export const useMediaSync = create<SyncState>(() => ({
+    revision: 0,
+    status: "idle",
+}));
 
 let pendingChange: PendingChange | null = null;
 let isSyncRunning = false;
-
-export function subscribeToSync(listener: () => void): () => void {
-    syncListeners.add(listener);
-
-    return () => {
-        syncListeners.delete(listener);
-    };
-}
-
-export function getSyncState(): SyncState {
-    return syncState;
-}
 
 /**
  * Brings the index up to date after the application starts. iOS keeps no
@@ -142,15 +133,14 @@ async function runPendingSyncs(): Promise<void> {
         }
     }
 
-    setSyncState({ ...syncState, status: "idle" });
+    useMediaSync.setState({ status: "idle" });
     isSyncRunning = false;
 }
 
 async function runFullSync(): Promise<void> {
     const isFirstIndex = (await readModificationCursor()) === null;
 
-    setSyncState({
-        ...syncState,
+    useMediaSync.setState({
         status: isFirstIndex ? "indexing" : "updating",
     });
 
@@ -189,7 +179,7 @@ async function runIncrementalSync(
         return;
     }
 
-    setSyncState({ ...syncState, status: "updating" });
+    useMediaSync.setState({ status: "updating" });
 
     const indexedIds = await readIndexedIds();
     const changedItems = await queryDeviceItems({ modifiedSince: cursor });
@@ -325,20 +315,5 @@ function toMediaItem(metadata: AssetMetadata): MediaItem {
 }
 
 function publishChange(): void {
-    setSyncState({ ...syncState, revision: syncState.revision + 1 });
-}
-
-function setSyncState(nextState: SyncState): void {
-    if (
-        nextState.revision === syncState.revision &&
-        nextState.status === syncState.status
-    ) {
-        return;
-    }
-
-    syncState = nextState;
-
-    for (const listener of syncListeners) {
-        listener();
-    }
+    useMediaSync.setState((state) => ({ revision: state.revision + 1 }));
 }

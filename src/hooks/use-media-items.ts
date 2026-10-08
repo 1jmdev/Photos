@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 
 import {
     type Collection,
@@ -11,7 +11,7 @@ import {
     readMediaList,
 } from "@/lib/database";
 import { type Place, resolvePlace } from "@/lib/location";
-import { getSyncState, subscribeToSync } from "@/lib/media-sync";
+import { useMediaSync } from "@/lib/media-sync";
 
 type CachedMediaList = {
     key: string;
@@ -27,10 +27,6 @@ const EMPTY_ENTRIES: MediaListEntry[] = [];
  */
 const mediaListCache = new Map<string, CachedMediaList>();
 
-function useRevision(): number {
-    return useSyncExternalStore(subscribeToSync, getSyncState).revision;
-}
-
 /**
  * Returns the items of a source ordered from newest to oldest. The list is
  * reloaded from the local index whenever the library changes.
@@ -40,7 +36,7 @@ export function useMediaList(source: MediaSource): {
     isLoaded: boolean;
 } {
     const key = getSourceKey(source);
-    const revision = useRevision();
+    const revision = useMediaSync((state) => state.revision);
     const [list, setList] = useState(() => mediaListCache.get(key) ?? null);
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: the source is fully described by its key.
@@ -87,7 +83,7 @@ export function useMediaList(source: MediaSource): {
 export function useCollections():
     | { collections: Collection[]; albums: Collection[] }
     | undefined {
-    const revision = useRevision();
+    const revision = useMediaSync((state) => state.revision);
     const [result, setResult] =
         useState<Awaited<ReturnType<typeof readCollections>>>();
 

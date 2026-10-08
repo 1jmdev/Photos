@@ -1,7 +1,6 @@
 import { useRecyclingState } from "@shopify/flash-list";
 import { Image } from "expo-image";
 import { memo } from "react";
-import { PixelRatio } from "react-native";
 
 type MediaThumbnailProps = {
     uri: string;
@@ -24,7 +23,7 @@ export const MediaThumbnail = memo(function MediaThumbnail({
                 loadingEnabled || loadedUri === uri
                     ? {
                           uri,
-                          cacheKey: `thumbnail:${uri}:${Math.round(size * PixelRatio.get())}`,
+                          cacheKey: `thumbnail:${uri}`,
                       }
                     : null
             }

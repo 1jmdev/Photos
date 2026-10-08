@@ -15,8 +15,6 @@ import { useMediaLibrary } from "@/hooks/use-media-library";
 import type { MediaSource } from "@/lib/database";
 import { cn } from "@/lib/utils";
 
-type Tab = "photos" | "albums";
-
 const ALL_ITEMS: MediaSource = { kind: "all" };
 const HEADER_HEIGHT = 52;
 const TAB_BAR_HEIGHT = 56;
@@ -27,7 +25,7 @@ export function HomeScreen() {
     const { isGranted, syncStatus, requestPermission } = useMediaLibrary();
     const { entries, isLoaded } = useMediaList(ALL_ITEMS);
     const overview = useCollections();
-    const [tab, setTab] = useState<Tab>("photos");
+    const [tab, setTab] = useState<"photos" | "albums">("photos");
 
     if (isGranted === undefined) {
         return <View className="flex-1 bg-black" />;

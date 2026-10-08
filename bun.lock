@@ -53,6 +53,7 @@
         "react-native-worklets": "0.13.0",
         "tailwind-merge": "^3.7.0",
         "tailwindcss-animate": "^1.0.7",
+        "zustand": "^5.0.15",
       },
       "devDependencies": {
         "@biomejs/biome": "^2.5.15",

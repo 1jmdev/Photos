@@ -1,3 +1,5 @@
+import type { GalleryScale } from "@/lib/settings";
+
 const SHORT_MONTH_NAMES = [
     "Jan",
     "Feb",
@@ -48,6 +50,37 @@ export function formatDayTitle(timestamp: number): string {
     }
 
     return `${title}, ${date.getFullYear()}`;
+}
+
+export function getGallerySection(timestamp: number, scale: GalleryScale) {
+    const date = new Date(timestamp);
+
+    if (scale === "small") {
+        return { key: getDayKey(timestamp), title: formatDayTitle(timestamp) };
+    }
+
+    if (scale === "large") {
+        date.setDate(1);
+
+        return {
+            key: getDayKey(date.getTime()),
+            title:
+                SHORT_MONTH_NAMES[date.getMonth()] +
+                (date.getFullYear() < new Date().getFullYear()
+                    ? ` ${date.getFullYear()}`
+                    : ""),
+        };
+    }
+
+    date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+    const sunday = new Date(date);
+
+    sunday.setDate(sunday.getDate() + 6);
+
+    return {
+        key: getDayKey(date.getTime()),
+        title: `${formatDayTitle(date.getTime())} – ${formatDayTitle(sunday.getTime())}`,
+    };
 }
 
 /** Formats a full date such as "April 22, 2025". */

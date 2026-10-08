@@ -1,14 +1,13 @@
 import { addListener, usePermissions } from "expo-media-library";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect } from "react";
 import { AppState, Linking } from "react-native";
 
 import {
-    getSyncState,
     type SyncStatus,
-    subscribeToSync,
     syncMediaLibraryChange,
     syncOnResume,
     syncOnStart,
+    useMediaSync,
 } from "@/lib/media-sync";
 
 export type MediaLibraryState = {
@@ -27,7 +26,7 @@ export function useMediaLibrary(): MediaLibraryState {
     const [permission, askForPermission] = usePermissions({
         granularPermissions: ["photo", "video"],
     });
-    const { status } = useSyncExternalStore(subscribeToSync, getSyncState);
+    const status = useMediaSync((state) => state.status);
     const isGranted = permission?.granted;
 
     useEffect(() => {
